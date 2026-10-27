@@ -152,7 +152,7 @@ function TreeComponentView({ comp, width, props }: { comp: TreeComponent; width:
           const isHot = highlighted?.has(n.id);
           const isSelected = selected === n.id;
           const tags = labels.get(n.id) ?? [];
-          const value = nodeValueLabel(h, heap);
+          const value = props.diagram.labels[n.id] ?? nodeValueLabel(h, heap);
           const describe = [
             `node ${value}`,
             tags.length ? `referenced by ${tags.map((t) => t.name).join(', ')}` : '',

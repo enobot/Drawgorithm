@@ -4,9 +4,10 @@ import { create } from 'zustand';
 import { DEFAULT_PROBLEM_ID, PROBLEMS, problemById, type ProblemDef } from '../problems/catalog';
 import { parseProblemText, parseValue, starterFor, type ParsedProblem } from '../problems/pasted';
 import type { ExpectSpec, InputKind, LiveResult, RunRequest, RunResult } from '../trace/types';
-import { EngineStopped, runInWorker, stopRun } from '../worker/client';
+import { EngineStopped, cancelObsoleteRun, runInWorker, stopRun } from '../worker/client';
 import { mergeLive, type LiveState } from './live';
 import type { FormatResult } from '../editor/format';
+import { NO_OVERRIDES, type ArrayRole, type BindingOverrides, type NodeShape } from '../viz/bindings';
 
 export interface InputRow {
   name: string;
@@ -40,6 +41,8 @@ export interface RunState {
   lastGood: { result: RunResult; codeAtRun: string; problemId: string; expect: ExpectSpec } | null;
   /** The user chose to step through the partial trace of a failed run. */
   inspectFailed: boolean;
+  /** Started automatically after a typing pause rather than by the Run button. */
+  auto: boolean;
 }
 
 export interface DisplayedRun {
@@ -86,6 +89,10 @@ interface State {
   formatOnSave: boolean;
   formatNonce: number;
   formatMessage: { text: string; tone: 'ok' | 'error' } | null;
+  /** Run the code with the selected inputs after each typing pause. */
+  autoRun: boolean;
+  /** The user's drawing choices per problem (see viz/bindings.ts). */
+  bindings: Record<string, BindingOverrides>;
 }
 
 interface Actions {
@@ -95,12 +102,21 @@ interface Actions {
   selectCase(index: number): void;
   setInput(name: string, text: string): void;
   setInputKind(name: string, kind: InputKind): void;
+  /** Adds an empty input, e.g. for a function parameter the pasted examples didn't cover. */
+  addInput(name: string): void;
+  removeInput(name: string): void;
   setExpected(text: string): void;
   setCustomText(text: string): void;
   setCustomEntry(entry: string): void;
-  /** `background` runs without switching to the Run tab (used on first load). */
-  startRun(opts?: { background?: boolean }): Promise<void>;
+  /** `background` and `auto` run without switching tabs; `auto` marks a run started by a typing pause. */
+  startRun(opts?: { background?: boolean; auto?: boolean }): Promise<void>;
   stop(): void;
+  /** Drops an in-flight run whose code is out of date. */
+  cancelRun(): void;
+  setAutoRun(on: boolean): void;
+  /** null removes the choice and returns to automatic detection. */
+  bindShape(className: string, shape: NodeShape | null): void;
+  bindArray(name: string, choice: { role?: ArrayRole; pointers?: string[] } | null): void;
   setInspectFailed(inspect: boolean): void;
   requestFormat(): void;
   setFormatOnSave(on: boolean): void;
@@ -110,7 +126,7 @@ interface Actions {
   setPlaying(playing: boolean): void;
   setSpeed(speed: number): void;
   setTab(tab: VizTab): void;
-  setLive(result: LiveResult): void;
+  setLive(result: LiveResult, code: string): void;
   setCursorLine(line: number | null): void;
   selectNode(id: number | null): void;
   dismissHint(): void;
@@ -119,6 +135,13 @@ interface Actions {
 
 export const CUSTOM_ID = 'custom';
 const STORAGE_KEY = 'drawgorithms:v1';
+
+let latestRun = 0;
+
+/** Problems solved by a function open on Run (the body needs the inputs); scripts open on Build. */
+function defaultTab(p: ProblemDef): VizTab {
+  return p.mode === 'function' ? 'run' : 'build';
+}
 
 const toText = (v: unknown) => (v === undefined ? '' : JSON.stringify(v));
 
@@ -170,6 +193,8 @@ interface Saved {
   hintDismissed: boolean;
   speed: number;
   formatOnSave: boolean;
+  autoRun: boolean;
+  bindings: Record<string, BindingOverrides>;
 }
 
 function load(): Partial<Saved> {
@@ -196,7 +221,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   custom: initialCustom,
   hintDismissed: saved.hintDismissed ?? false,
   speed: saved.speed ?? 1,
-  tab: 'build',
+  tab: defaultTab(problemFor(initialProblemId, initialCustom)),
   run: {
     status: 'idle',
     result: null,
@@ -206,10 +231,11 @@ export const useStore = create<State & Actions>()((set, get) => ({
     message: null,
     lastGood: null,
     inspectFailed: false,
+    auto: false,
   },
   step: 0,
   playing: false,
-  live: { result: null, lastDrawn: null },
+  live: { result: null, code: null, lastDrawn: null },
   cursorLine: null,
   selectedNode: null,
   mobilePane: 'code',
@@ -217,23 +243,29 @@ export const useStore = create<State & Actions>()((set, get) => ({
   formatOnSave: saved.formatOnSave ?? false,
   formatNonce: 0,
   formatMessage: null,
+  autoRun: saved.autoRun ?? true,
+  bindings: saved.bindings ?? {},
 
   selectProblem(id) {
     const s = get();
     const p = problemFor(id, s.custom);
+    s.cancelRun();
     set({
       problemId: id,
       work: s.work[id] ? s.work : { ...s.work, [id]: freshWork(p) },
       playing: false,
       selectedNode: null,
-      tab: 'build',
-      live: { result: null, lastDrawn: null },
+      tab: defaultTab(p),
+      live: { result: null, code: null, lastDrawn: null },
     });
   },
 
   setCode(code) {
     const s = get();
     const w = currentWork(s);
+    if (w.code === code) return;
+    // A run of the old code is obsolete now.
+    s.cancelRun();
     set({ work: { ...s.work, [s.problemId]: { ...w, code } } });
   },
 
@@ -261,6 +293,19 @@ export const useStore = create<State & Actions>()((set, get) => ({
     set({ work: { ...s.work, [s.problemId]: { ...w, inputs: w.inputs.map((r) => (r.name === name ? { ...r, kind } : r)) } } });
   },
 
+  addInput(name) {
+    const s = get();
+    const w = currentWork(s);
+    if (w.inputs.some((r) => r.name === name)) return;
+    set({ work: { ...s.work, [s.problemId]: { ...w, inputs: [...w.inputs, { name, text: '', kind: 'auto' }] } } });
+  },
+
+  removeInput(name) {
+    const s = get();
+    const w = currentWork(s);
+    set({ work: { ...s.work, [s.problemId]: { ...w, inputs: w.inputs.filter((r) => r.name !== name) } } });
+  },
+
   setExpected(text) {
     const s = get();
     set({ work: { ...s.work, [s.problemId]: { ...currentWork(s), expectedText: text } } });
@@ -282,20 +327,26 @@ export const useStore = create<State & Actions>()((set, get) => ({
   },
 
   async startRun(opts = {}) {
+    // Only the newest run may publish its result; older ones are cancelled.
+    const token = ++latestRun;
     const s = get();
-    if (s.run.status === 'running') return;
-    const show = opts.background ? {} : { tab: 'run' as const };
+    const quiet = opts.background || opts.auto;
+    const show = quiet ? {} : { tab: 'run' as const };
     const p = problemFor(s.problemId, s.custom);
     const w = currentWork(s);
     const bad = w.inputs.find((r) => !parseValue(r.text).ok);
     if (p.mode === 'function' && bad) {
+      cancelObsoleteRun();
       set({
         run: {
           ...s.run,
           status: 'failed',
+          result: null,
+          codeAtRun: w.code,
           problemId: p.id,
           inspectFailed: false,
-          message: `Input ${bad.name} is not valid JSON. Example: [2, 7, 11, 15] or 9 or "text".`,
+          auto: !!opts.auto,
+          message: `Input ${bad.name} is not valid JSON yet. Example: [2, 7, 11, 15] or 9 or "text".`,
         },
         playing: false,
         ...show,
@@ -311,22 +362,11 @@ export const useStore = create<State & Actions>()((set, get) => ({
       inputs: p.mode === 'function' ? w.inputs.map((r) => ({ name: r.name, value: parseValue(r.text).value, kind: r.kind })) : [],
     };
     const lastGood = s.run.lastGood;
-    set({
-      run: {
-        status: 'running',
-        result: s.run.result,
-        codeAtRun: w.code,
-        problemId: p.id,
-        expect,
-        message: null,
-        lastGood,
-        inspectFailed: false,
-      },
-      playing: false,
-      ...show,
-    });
+    // While running, the previous trace stays paired with the code that produced it.
+    set({ run: { ...s.run, status: 'running', message: null, inspectFailed: false, auto: !!opts.auto }, playing: false, ...show });
     try {
       const result = await runInWorker(request);
+      if (token !== latestRun) return;
       const ok = result.status === 'finished';
       set({
         run: {
@@ -339,20 +379,58 @@ export const useStore = create<State & Actions>()((set, get) => ({
           // Only a run that finished becomes the new drawing to fall back on.
           lastGood: ok ? { result, codeAtRun: w.code, problemId: p.id, expect } : lastGood,
           inspectFailed: false,
+          auto: !!opts.auto,
         },
-        step: 0,
+        // An automatic run opens on its final state (the drawing your code ends with); Run starts from the top.
+        step: opts.auto && ok ? result.steps.length - 1 : 0,
         selectedNode: null,
-        ...(opts.background ? {} : { mobilePane: 'visual' as const }),
+        ...(quiet ? {} : { mobilePane: 'visual' as const }),
       });
     } catch (e) {
+      if (token !== latestRun) return;
+      if (e instanceof EngineStopped && e.reason === 'superseded') return;
       const message = e instanceof EngineStopped ? e.message : `The engine failed: ${String(e)}`;
       const status = e instanceof EngineStopped && e.reason === 'stopped' ? 'stopped' : 'failed';
-      set({ run: { ...get().run, status, message, result: null, inspectFailed: false }, step: 0, playing: false });
+      set({
+        run: { ...get().run, status, message, result: null, codeAtRun: w.code, problemId: p.id, inspectFailed: false },
+        step: 0,
+        playing: false,
+      });
     }
   },
 
   stop() {
     stopRun();
+  },
+
+  cancelRun() {
+    const r = get().run;
+    if (r.status !== 'running') return;
+    latestRun++;
+    cancelObsoleteRun();
+    set({ run: { ...r, status: r.result ? 'done' : 'idle' } });
+  },
+
+  setAutoRun(on) {
+    set({ autoRun: on });
+  },
+
+  bindShape(className, shape) {
+    const s = get();
+    const cur = s.bindings[s.problemId] ?? NO_OVERRIDES;
+    const shapes = { ...cur.shapes };
+    if (shape) shapes[className] = shape;
+    else delete shapes[className];
+    set({ bindings: { ...s.bindings, [s.problemId]: { ...cur, shapes } } });
+  },
+
+  bindArray(name, choice) {
+    const s = get();
+    const cur = s.bindings[s.problemId] ?? NO_OVERRIDES;
+    const arrays = { ...cur.arrays };
+    if (choice) arrays[name] = { ...arrays[name], ...choice };
+    else delete arrays[name];
+    set({ bindings: { ...s.bindings, [s.problemId]: { ...cur, arrays } } });
   },
 
   requestFormat() {
@@ -396,8 +474,8 @@ export const useStore = create<State & Actions>()((set, get) => ({
     set({ tab, playing: false, selectedNode: null });
   },
 
-  setLive(result) {
-    set({ live: mergeLive(get().live, result) });
+  setLive(result, code) {
+    set({ live: mergeLive(get().live, result, code) });
   },
 
   setCursorLine(line) {
@@ -432,10 +510,10 @@ export function expectFrom(p: ProblemDef, text: string): ExpectSpec {
   return { kind: 'return', value: parsed.value };
 }
 
-let saveTimer: number | undefined;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
 useStore.subscribe((s) => {
-  window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
     const data: Saved = {
       problemId: s.problemId,
       work: s.work,
@@ -443,6 +521,8 @@ useStore.subscribe((s) => {
       hintDismissed: s.hintDismissed,
       speed: s.speed,
       formatOnSave: s.formatOnSave,
+      autoRun: s.autoRun,
+      bindings: s.bindings,
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));

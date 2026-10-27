@@ -5,6 +5,8 @@ import type { EngineError, Step, StepKind } from '../trace/types';
 import { buildTraversalIndex, traversalAt } from '../viz/analysis';
 import { CallStack, ResultBanner, Structures, type BoardContext } from '../viz/Board';
 import { focusOf } from '../viz/focus';
+import { NO_OVERRIDES, resolveBindings } from '../viz/bindings';
+import { BindingsPanel } from './BindingsPanel';
 import { Inspector } from './Inspector';
 import { NodeDetails } from './NodeDetails';
 import { Playback } from './Playback';
@@ -121,8 +123,18 @@ export function RunView() {
   const display = useMemo(() => displayedRun({ run, problemId }), [run, problemId]);
   const result = display?.result ?? null;
   const problem = problemFor(problemId, custom);
-  const traversal = useMemo(() => (result ? buildTraversalIndex(result.steps) : null), [result]);
+  const overrides = useStore((s) => s.bindings[s.problemId]) ?? NO_OVERRIDES;
   const step = result?.steps[Math.min(index, result.steps.length - 1)];
+  const bindings = useMemo(
+    () => (result && step ? resolveBindings(step.heap, step.frames, result.hints, overrides) : null),
+    [result, step, overrides],
+  );
+  // Traversal state (visited, returned values) is read through the bindings of the final state.
+  const traversal = useMemo(() => {
+    if (!result) return null;
+    const last = result.steps[result.steps.length - 1];
+    return buildTraversalIndex(result.steps, resolveBindings(last.heap, last.frames, result.hints, overrides).shapeOf);
+  }, [result, overrides]);
   const focus = useMemo(() => focusOf(step ?? null), [step]);
   const failed = run.problemId === problemId && runFailed(run) && run.status !== 'running';
 
@@ -157,7 +169,8 @@ export function RunView() {
   const tr = traversal ? traversalAt(traversal, step.index) : null;
   const ctx: BoardContext = {
     step,
-    hints: result.hints,
+    hints: bindings!.hints,
+    shapeOf: bindings!.shapeOf,
     focus,
     view: problem.view,
     resultCells: step.kind === 'done' ? resultIndexCells(step, problem.view?.resultIndicesInto) : undefined,
@@ -168,7 +181,9 @@ export function RunView() {
     onSelectNode: (id) => selectNode(selectedNode === id ? null : id),
   };
   const comparison = step.kind === 'done' && display ? compareRun(display.expect, result) : null;
-  const stale = display!.kind === 'current' && display!.codeAtRun !== code && run.status !== 'running';
+  // A trace is never presented as belonging to code it did not come from.
+  const stale = display!.codeAtRun !== code;
+  const running = run.status === 'running';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -185,20 +200,35 @@ export function RunView() {
           result.
         </p>
       )}
-      {stale && (
-        <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-[13px] text-amber-100">
-          <span>You edited the code after this run. The drawing still shows the old run.</span>
-          <button type="button" className="btn-outline h-7" onClick={() => void startRun()}>
-            Run again
-          </button>
+      {stale && display!.kind === 'current' && (
+        <div
+          role="status"
+          className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-[13px] text-amber-100"
+        >
+          <span>
+            {running
+              ? 'Running your latest edit. Until it finishes, this is the run of your previous code.'
+              : 'You edited the code after this run. The drawing still shows the old run.'}
+          </span>
+          {!running && (
+            <button type="button" className="btn-outline h-7" onClick={() => void startRun()}>
+              Run again
+            </button>
+          )}
         </div>
       )}
-      {run.status === 'running' && <p className="mx-4 mt-3 text-[13px] text-navy-300">Running your code…</p>}
+      {running && !stale && <p className="mx-4 mt-3 text-[13px] text-navy-300">Running your code…</p>}
+      {!running && !stale && run.auto && display!.kind === 'current' && (
+        <p className="mx-4 mt-3 text-[12.5px] text-navy-300">
+          Ran automatically after your last edit and is showing the final state. Press Home or Play to watch it from the start.
+        </p>
+      )}
       {result.notes.map((n) => (
         <p key={n} className="mx-4 mt-3 text-[13px] text-navy-300">
           {n}
         </p>
       ))}
+      <BindingsPanel bindings={bindings!} />
       <div className="board-grid min-h-0 flex-1 overflow-auto px-4 py-4">
         <div className="flex flex-col gap-5">
           {step.kind === 'done' && <ResultBanner step={step} comparison={comparison} />}
@@ -208,6 +238,7 @@ export function RunView() {
               id={selectedNode}
               step={step}
               heap={step.heap}
+              shapeOf={bindings!.shapeOf}
               visited={tr?.visited.has(selectedNode)}
               returned={tr?.returned.get(selectedNode)}
               onClose={() => selectNode(null)}

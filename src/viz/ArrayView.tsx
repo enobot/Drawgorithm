@@ -54,9 +54,11 @@ export function Cells({ items, total, heap, markers, reads, writes, role, result
   const byIndex = new Map<number, Marker[]>();
   for (const m of markers) byIndex.set(m.index, [...(byIndex.get(m.index) ?? []), m]);
   const markerRows = Math.max(0, ...[...byIndex.values()].map((l) => l.length));
+  // Room for the "answer" labels under result cells, so markers sit below them.
+  const labelRow = result && result.size ? 14 : 0;
 
   return (
-    <div className="relative" style={{ width, paddingBottom: markerRows ? markerRows * MARKER_ROW + 18 : 0 }}>
+    <div className="relative" style={{ width, paddingBottom: markerRows ? markerRows * MARKER_ROW + 18 + labelRow : 0 }}>
       {win && win.from <= win.to && (
         <motion.div
           aria-hidden
@@ -125,7 +127,7 @@ export function Cells({ items, total, heap, markers, reads, writes, role, result
           <motion.div
             key={m.name}
             className="absolute flex flex-col items-center"
-            style={{ top: CELL + 20 + (row === 0 ? 0 : 9 + row * MARKER_ROW), width: CELL }}
+            style={{ top: CELL + 20 + labelRow + (row === 0 ? 0 : 9 + row * MARKER_ROW), width: CELL }}
             initial={false}
             animate={{ left: (lead + index) * STEP }}
             transition={{ type: 'spring', stiffness: 300, damping: 28 }}

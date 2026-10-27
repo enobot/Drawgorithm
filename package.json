@@ -2,7 +2,7 @@
   "name": "drawgorithms",
   "private": true,
   "version": "0.1.0",
-  "description": "Write JavaScript for coding problems and watch what it does, drawn step by step.",
+  "description": "Write code for coding problems and watch what it does, drawn step by step.",
   "type": "module",
   "scripts": {
     "dev": "vite",

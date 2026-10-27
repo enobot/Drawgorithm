@@ -3,18 +3,9 @@ import { useMemo } from 'react';
 import type { ProblemDef } from '../problems/catalog';
 import type { Comparison } from '../problems/compare';
 import type { FrameSnap, Heap, HeapSnap, StaticHints, Step, VarSnap } from '../trace/types';
-import {
-  buildListDiagram,
-  buildTreeDiagram,
-  formatSnap,
-  isListObj,
-  isTreeObj,
-  markersFor,
-  nodeLabels,
-  refId,
-  variableRefs,
-} from './analysis';
+import { buildListDiagram, buildTreeDiagram, conventionShape, formatSnap, markersFor, nodeLabels, refId, variableRefs } from './analysis';
 import { ArrayView, Cells, type ArrayRole } from './ArrayView';
+import type { ShapeOf } from './bindings';
 import type { Focus } from './focus';
 import { ListView } from './ListView';
 import { MapView, ObjectView, SetView } from './MapView';
@@ -23,7 +14,10 @@ import { NameTag, ValueText, VarBlock, type BlockState } from './Value';
 
 export interface BoardContext {
   step: Step;
+  /** Static hints with the user's array bindings applied. */
   hints: StaticHints;
+  /** Which objects are tree or list nodes, and which fields to read (from the bindings). */
+  shapeOf?: ShapeOf;
   focus: Focus;
   view?: ProblemDef['view'];
   /** Index cells to ring on the final step (e.g. Two Sum's answer). */
@@ -40,7 +34,8 @@ export interface BoardContext {
   extraNodeIds?: number[];
 }
 
-const isPrimitive = (v: VarSnap, heap: Heap) => v.value.t !== 'ref' || isTreeObj(heap[v.value.id]) || isListObj(heap[v.value.id]);
+/** Node references are shown as pointer blocks; their structure is drawn once, above the frames. */
+const isPrimitive = (v: VarSnap, heap: Heap, shapeOf: ShapeOf) => v.value.t !== 'ref' || !!shapeOf(heap[v.value.id]);
 
 function roleOf(name: string, hints: StaticHints): ArrayRole {
   if (hints.queues.includes(name)) return 'queue';
@@ -49,12 +44,12 @@ function roleOf(name: string, hints: StaticHints): ArrayRole {
 }
 
 /** Ids of tree nodes held in queue/stack arrays, to badge them in the tree. */
-function queuedNodes(frame: FrameSnap, heap: Heap, hints: StaticHints): Set<number> {
+function queuedNodes(frame: FrameSnap, heap: Heap, hints: StaticHints, shapeOf: ShapeOf): Set<number> {
   const out = new Set<number>();
   for (const v of frame.vars) {
     if (!hints.queues.includes(v.name) && !hints.stacks.includes(v.name)) continue;
     const h = v.value.t === 'ref' ? heap[v.value.id] : undefined;
-    if (h?.kind === 'array') for (const item of h.items) if (item.t === 'ref' && isTreeObj(heap[item.id])) out.add(item.id);
+    if (h?.kind === 'array') for (const item of h.items) if (item.t === 'ref' && shapeOf(heap[item.id])?.kind === 'tree') out.add(item.id);
   }
   return out;
 }
@@ -123,15 +118,53 @@ function StructureFor({
   }
 }
 
+const joinAnd = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
+ * Cells read and written in this step, as text. This is what was observed; whether the
+ * reads are the written value's "subproblems" is the algorithm's meaning, which is not claimed.
+ */
+export function readWriteText(name: string, h: Extract<HeapSnap, { kind: 'array' }>, focus: Focus, heap: Heap): string | null {
+  const reads: string[] = [];
+  const writes: string[] = [];
+  const isGrid = h.items.length > 0 && h.items.every((v) => v.t === 'ref' && heap[v.id]?.kind === 'array');
+  if (isGrid) {
+    h.items.forEach((v, r) => {
+      if (v.t !== 'ref') return;
+      for (const c of focus.cellReads.get(v.id) ?? []) reads.push(`${name}[${r}][${c}]`);
+      for (const c of focus.cellWrites.get(v.id) ?? []) writes.push(`${name}[${r}][${c}]`);
+    });
+  } else {
+    for (const i of focus.cellReads.get(h.id) ?? []) reads.push(`${name}[${i}]`);
+    for (const i of focus.cellWrites.get(h.id) ?? []) writes.push(`${name}[${i}]`);
+  }
+  const readOnly = reads.filter((x) => !writes.includes(x));
+  if (!writes.length || !readOnly.length) return null;
+  return `This step read ${joinAnd(readOnly)} and wrote ${joinAnd(writes)}.`;
+}
+
+function ReadWriteCaption({ name, h, focus, heap }: { name: string; h: Extract<HeapSnap, { kind: 'array' }>; focus: Focus; heap: Heap }) {
+  const text = readWriteText(name, h, focus, heap);
+  if (!text) return null;
+  return (
+    <p className="text-[12.5px] text-navy-200">
+      <span className="mr-1.5 rounded bg-teal-400/15 px-1 text-teal-200">read</span>
+      <span className="mr-1.5 rounded bg-amber-300/15 px-1 text-amber-200">wrote</span>
+      {text}
+    </p>
+  );
+}
+
 /** Variables of one frame: value blocks first, then arrays, maps and objects. */
 export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: BoardContext; active: boolean }) {
   const { step, hints, focus } = ctx;
   const heap = step.heap;
-  const blocks = frame.vars.filter((v) => isPrimitive(v, heap) && !(v.value.t === 'string' && hints.indexed.includes(v.name)));
+  const shapeOf = ctx.shapeOf ?? conventionShape;
+  const blocks = frame.vars.filter((v) => isPrimitive(v, heap, shapeOf) && !(v.value.t === 'string' && hints.indexed.includes(v.name)));
   const strings = frame.vars.filter((v) => v.value.t === 'string' && hints.indexed.includes(v.name));
   const structures: { names: string[]; h: HeapSnap }[] = [];
   for (const v of frame.vars) {
-    if (isPrimitive(v, heap)) continue;
+    if (isPrimitive(v, heap, shapeOf)) continue;
     const id = refId(v.value)!;
     const h = heap[id];
     if (!h) continue;
@@ -170,6 +203,7 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
                   compute={active ? focus.compute.get(v.name) : undefined}
                   delay={anyCompute && state === 'new' ? 0.35 : 0}
                   onClick={id !== null && ctx.onSelectNode ? () => ctx.onSelectNode!(id) : undefined}
+                  shapeOf={shapeOf}
                 />
               );
             })}
@@ -208,6 +242,7 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
           <div className={`overflow-x-auto ${h.kind === 'array' ? 'pt-5 pb-1' : ''}`}>
             <StructureFor name={names[0]} h={h} frame={frame} ctx={ctx} active={active} />
           </div>
+          {active && h.kind === 'array' && <ReadWriteCaption name={names[0]} h={h} focus={ctx.focus} heap={heap} />}
         </div>
       ))}
     </div>
@@ -225,11 +260,12 @@ function frameSummary(frame: FrameSnap, heap: Heap): string {
 export function Structures({ ctx }: { ctx: BoardContext }) {
   const { step, focus } = ctx;
   const { order, referenced } = useMemo(() => variableRefs(step.frames), [step]);
-  const tree = useMemo(() => buildTreeDiagram(step.heap, order, referenced), [step, order, referenced]);
-  const list = useMemo(() => buildListDiagram(step.heap, order, referenced), [step, order, referenced]);
-  const labels = useMemo(() => nodeLabels(step.frames, step.heap), [step]);
+  const shapeOf = ctx.shapeOf ?? conventionShape;
+  const tree = useMemo(() => buildTreeDiagram(step.heap, order, referenced, shapeOf), [step, order, referenced, shapeOf]);
+  const list = useMemo(() => buildListDiagram(step.heap, order, referenced, shapeOf), [step, order, referenced, shapeOf]);
+  const labels = useMemo(() => nodeLabels(step.frames, step.heap, shapeOf), [step, shapeOf]);
   const activeFrame = step.frames[step.frames.length - 1];
-  const queued = activeFrame ? queuedNodes(activeFrame, step.heap, ctx.hints) : new Set<number>();
+  const queued = activeFrame ? queuedNodes(activeFrame, step.heap, ctx.hints, shapeOf) : new Set<number>();
   if (!tree.components.length && !list.chains.length) return null;
   return (
     <section aria-label="Trees and linked lists" className="flex flex-col gap-4">

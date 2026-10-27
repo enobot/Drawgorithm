@@ -3,27 +3,39 @@
 // so the editor and the drawing never disagree about what is valid.
 import * as monaco from 'monaco-editor';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
+import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
 import { formatJavaScript, type FormatResult } from './format';
 
 self.MonacoEnvironment = {
-  getWorker: () => new EditorWorker(),
+  getWorker: (_id, label) => (label === 'typescript' || label === 'javascript' ? new TsWorker() : new EditorWorker()),
 };
 
+// The JavaScript language service provides autocomplete, hovers and parameter hints only.
+// Errors come from the engine's own parser, so the editor and the drawing agree on what is valid.
 monaco.typescript.javascriptDefaults.setModeConfiguration({
-  completionItems: false,
-  hovers: false,
+  completionItems: true,
+  hovers: true,
+  signatureHelp: true,
   documentSymbols: false,
   definitions: false,
   references: false,
-  documentHighlights: false,
+  documentHighlights: true,
   rename: false,
   diagnostics: false,
   documentRangeFormattingEdits: false,
-  signatureHelp: false,
   onTypeFormattingEdits: false,
   codeActions: false,
   inlayHints: false,
 });
+// No DOM: user code cannot reach the page, so the editor shouldn't suggest it.
+monaco.typescript.javascriptDefaults.setCompilerOptions({ allowJs: true, allowNonTsExtensions: true, lib: ['es2023'], target: 99 });
+monaco.typescript.javascriptDefaults.addExtraLib(
+  `/** Binary tree node, LeetCode style. */
+declare class TreeNode { constructor(val?: number, left?: TreeNode | null, right?: TreeNode | null); val: number; left: TreeNode | null; right: TreeNode | null; }
+/** Singly linked list node, LeetCode style. */
+declare class ListNode { constructor(val?: number, next?: ListNode | null); val: number; next: ListNode | null; }`,
+  'ts:drawgorithms-globals.d.ts',
+);
 
 monaco.editor.defineTheme('drawgorithms', {
   base: 'vs-dark',

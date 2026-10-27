@@ -130,6 +130,50 @@ export function parseProblemText(text: string): ParsedProblem {
   return { title: title.replace(/^\s*\d+\.\s*/, ''), description, examples, functionName: camelCase(title), kinds };
 }
 
+export interface StructureSuggestion {
+  structure: string;
+  /** The words in the description that led to the suggestion. */
+  because: string;
+}
+
+// Patterns are tried in order, most specific first, so the quoted evidence is the clearest one.
+const SUGGESTION_RULES: { structure: string; patterns: RegExp[] }[] = [
+  { structure: 'Linked list', patterns: [/linked list/i] },
+  { structure: 'Binary tree', patterns: [/binary (search )?tree/i, /\bBST\b/, /\broot\b/i] },
+  { structure: 'Graph', patterns: [/\bgraph\b/i, /adjacen\w*/i, /prerequisites?/i, /\bedges?\b/i] },
+  { structure: 'Grid / matrix', patterns: [/\bgrid\b/i, /\bmatrix\b/i, /m x n/i] },
+  { structure: 'Hash map / set', patterns: [/\bfrequenc\w*/i, /\banagrams?\b/i, /\bduplicates?\b/i, /\bdistinct\b/i, /\bunique\b/i] },
+  { structure: 'Stack', patterns: [/\bstack\b/i, /parenthes\w*/i, /brackets?/i, /next greater/i] },
+  { structure: 'Queue', patterns: [/\bqueue\b/i, /level order/i, /breadth/i] },
+  { structure: 'Heap', patterns: [/\bheap\b/i, /k(th|-th)? (largest|smallest)/i, /\btop k\b/i, /priority/i] },
+  { structure: 'Sliding window / two pointers', patterns: [/\bwindow\b/i, /substring/i, /subarray/i, /\bconsecutive\b/i] },
+  { structure: 'Sorted array / binary search', patterns: [/O\(log ?n\)/i, /\bsorted\b/i, /\bascending\b/i] },
+  {
+    structure: 'Dynamic programming table',
+    patterns: [/number of ways/i, /longest common/i, /minimum (number|cost)/i, /maximum (profit|sum)/i, /\bclimb\w*/i],
+  },
+  { structure: 'Intervals', patterns: [/\bintervals?\b/i, /\bmeetings?\b/i, /overlap\w*/i] },
+  { structure: 'Bits', patterns: [/binary representation/i, /\bxor\b/i, /\bbits?\b/i] },
+];
+
+/**
+ * Data structures the description mentions or hints at. These are suggestions for
+ * choosing inputs and drawings; they say nothing about what the user's code does.
+ */
+export function suggestStructures(text: string): StructureSuggestion[] {
+  const out: StructureSuggestion[] = [];
+  for (const rule of SUGGESTION_RULES) {
+    for (const pattern of rule.patterns) {
+      const m = pattern.exec(text);
+      if (m) {
+        out.push({ structure: rule.structure, because: m[0] });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 export function starterFor(problem: ParsedProblem): string {
   const params = problem.examples[0]?.inputs.map((i) => i.name) ?? [];
   return `function ${problem.functionName}(${params.join(', ')}) {\n  // Write your solution here.\n\n}\n`;

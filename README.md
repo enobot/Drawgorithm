@@ -1,6 +1,8 @@
 # Drawgorithms
 
-Write JavaScript for coding-interview style problems and see what it does. **Build** redraws the structure your top-level code creates as you type. **Run** records your code's real execution and plays it back step by step: source line, variables, data structures, call stack, explanation and output stay in sync.
+Write code for coding-interview style problems in the language you choose and see what it does. **Build** redraws the structure your top-level code creates as you type. **Run** records your code's real execution and plays it back step by step: source line, variables, data structures, call stack, explanation and output stay in sync.
+
+Languages: JavaScript runs today. TypeScript, Python, Java and C++ are planned through language adapters that produce the same trace; the Language menu marks each one as unavailable until its adapter works and is tested. See [docs/COVERAGE.md](docs/COVERAGE.md).
 
 Drawgorithms is an independent project. It is not affiliated with LeetCode. The built-in problems are written for this project.
 
@@ -25,7 +27,7 @@ No API key or backend is needed. Code and settings are saved in the browser (loc
 - **Build tab**: draws what top-level code builds (e.g. `const root = new TreeNode(5)`). Function bodies wait for Run. Put the cursor on a line to highlight what it built; click a node to see which lines created and connected it. While code is unfinished, invalid, unsupported or failing, the last valid drawing stays, labeled **Previous valid state**.
 - **Run tab**: play/pause, step back/forward (← →), Home/End, speed, draggable timeline. A run that finishes shows the actual result next to the expected output, even when the answer is wrong. A run that fails or hits a limit is not drawn as a result: you get the error and its line, the last successful run stays visible (labeled), and you can choose to step through what ran before it stopped.
 
-## Supported JavaScript
+## Supported JavaScript (the first language adapter)
 
 let/const/var, functions, arrow functions, recursion, closures, classes without `extends`, `new`, if/else, switch, for, for…of, for…in, while, do…while, labeled break/continue, try/catch/finally, throw, destructuring, spread/rest, default parameters, template strings, optional chaining, `??`, and the usual operators.
 

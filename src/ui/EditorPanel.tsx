@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { setFormatListener } from '../editor/monaco';
+import { LANGUAGES } from '../languages';
 import { PROBLEMS } from '../problems/catalog';
 import { CUSTOM_ID, currentWork, displayedRun, problemFor, useStore } from '../state/store';
 import { CodeEditor, type EditorMarks } from './CodeEditor';
@@ -46,7 +47,11 @@ function useEditorMarks(): EditorMarks {
 function SupportedJs() {
   return (
     <details className="text-[12.5px] text-navy-300">
-      <summary className="cursor-pointer select-none font-semibold hover:text-navy-100">Supported JavaScript</summary>
+      <summary className="cursor-pointer select-none font-semibold hover:text-navy-100">Supported languages and features</summary>
+      <p className="mt-1.5 leading-relaxed">
+        Languages that run today: JavaScript. TypeScript, Python, Java and C++ are planned; the Language menu shows each one's status. For
+        JavaScript:
+      </p>
       <p className="mt-1.5 leading-relaxed">
         let, const, var, functions, arrow functions, recursion, classes (no extends), if/else, switch, for, for…of, for…in, while, do…while,
         break, continue, try/catch, destructuring, spread, template strings, arrays and their common methods, strings, Map, Set, Math,
@@ -79,7 +84,6 @@ export function EditorPanel() {
     selectProblem,
     setCursorLine,
     dismissHint,
-    setTab,
     requestFormat,
     setFormatOnSave,
     showFormatResult,
@@ -130,7 +134,26 @@ export function EditorPanel() {
           <input type="checkbox" checked={formatOnSave} onChange={(e) => setFormatOnSave(e.target.checked)} className="accent-teal-400" />
           Format on save
         </label>
-        <label className="ml-auto flex items-center gap-1.5 text-[12.5px] text-navy-300">
+        <label
+          className="ml-auto flex items-center gap-1.5 text-[12.5px] text-navy-300"
+          title={LANGUAGES.filter((l) => !l.available)
+            .map((l) => `${l.label}: ${l.note}`)
+            .join('\n')}
+        >
+          Language
+          <select
+            value="javascript"
+            onChange={() => {}}
+            className="rounded-md border border-navy-600 bg-navy-900 px-1.5 py-1 text-[12.5px] text-navy-100 hover:border-navy-400"
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.id} value={l.id} disabled={!l.available}>
+                {l.available ? l.label : `${l.label} (not available yet)`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-[12.5px] text-navy-300">
           Load example
           <select
             value={problemId}
@@ -163,7 +186,6 @@ export function EditorPanel() {
           onChange={(next) => {
             if (next === useStore.getState().work[useStore.getState().problemId]?.code) return;
             setCode(next);
-            if (useStore.getState().tab === 'run') setTab('build');
           }}
           onRun={() => void startRun()}
           onCursorLine={setCursorLine}

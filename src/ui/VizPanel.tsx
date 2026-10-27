@@ -12,6 +12,8 @@ export function VizPanel() {
   const setTab = useStore((s) => s.setTab);
   const runStatus = useStore((s) => s.run.status);
   const pending = useStore((s) => s.live.result?.status === 'pending');
+  const autoRun = useStore((s) => s.autoRun);
+  const setAutoRun = useStore((s) => s.setAutoRun);
   const active = TABS.find((t) => t.id === tab)!;
 
   return (
@@ -41,6 +43,13 @@ export function VizPanel() {
           ))}
         </div>
         <p className="text-[12.5px] text-navy-300">{active.hint}</p>
+        <label
+          className="ml-auto flex items-center gap-1.5 text-[12.5px] text-navy-300"
+          title="After you pause typing, check the code and run it with the selected inputs. Runs of older code are cancelled."
+        >
+          <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} className="accent-teal-400" />
+          Run as I type
+        </label>
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="min-h-0 flex-1">
         {tab === 'build' ? <BuildView /> : <RunView />}

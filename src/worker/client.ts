@@ -7,8 +7,9 @@ export const RUN_TIME_LIMIT_MS = 6000;
 const LIVE_TIME_LIMIT_MS = 1500;
 
 export class EngineStopped extends Error {
-  reason: 'stopped' | 'timeout' | 'crashed';
-  constructor(reason: 'stopped' | 'timeout' | 'crashed', message: string) {
+  /** superseded: a newer request (or an edit) made this one obsolete. */
+  reason: 'stopped' | 'timeout' | 'crashed' | 'superseded';
+  constructor(reason: EngineStopped['reason'], message: string) {
     super(message);
     this.reason = reason;
   }
@@ -38,7 +39,7 @@ class WorkerSlot {
 
   send(make: (id: number) => EngineRequest, timeoutMs: number, timeoutMessage: string): Promise<EngineResponse> {
     // A new request replaces any unfinished one.
-    if (this.pending) this.abort(new EngineStopped('stopped', 'Replaced by a newer request.'));
+    if (this.pending) this.abort(new EngineStopped('superseded', 'Replaced by a newer request.'));
     const worker = this.ensure();
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
@@ -68,7 +69,7 @@ const liveSlot = new WorkerSlot();
 
 export async function runInWorker(request: RunRequest): Promise<RunResult> {
   const res = await runSlot.send(
-    (id) => ({ id, type: 'run', request }),
+    (id) => ({ id, language: 'javascript', type: 'run', request }),
     RUN_TIME_LIMIT_MS,
     `Stopped after ${RUN_TIME_LIMIT_MS / 1000} seconds without finishing.`,
   );
@@ -81,8 +82,17 @@ export function stopRun(): void {
   if (runSlot.busy) runSlot.abort(new EngineStopped('stopped', 'You stopped the run.'));
 }
 
+/** Cancels a run that no longer matches the code (the user edited again). */
+export function cancelObsoleteRun(): void {
+  if (runSlot.busy) runSlot.abort(new EngineStopped('superseded', 'The code changed, so this run was cancelled.'));
+}
+
 export async function liveInWorker(code: string): Promise<LiveResult> {
-  const res = await liveSlot.send((id) => ({ id, type: 'live', code }), LIVE_TIME_LIMIT_MS, 'Live Build took too long.');
+  const res = await liveSlot.send(
+    (id) => ({ id, language: 'javascript', type: 'live', code }),
+    LIVE_TIME_LIMIT_MS,
+    'Live Build took too long.',
+  );
   if (res.type === 'crash') throw new EngineStopped('crashed', res.message);
   if (res.type !== 'live') throw new EngineStopped('crashed', 'Unexpected engine response.');
   return res.result;

@@ -68,12 +68,41 @@ export function isHeapValue(v: Value): v is HeapValue {
 }
 
 // Plain boolean results (not type guards): a `false` must not rule out ObjRecord in general.
+// Node conventions used for explanations ("node 5"). They match the drawing's
+// automatic bindings (viz/bindings.ts); user overrides only affect the drawing.
+const VALUE_FIELDS = ['val', 'value', 'data', 'key'];
+const NEXT_FIELDS = ['next', 'nxt', 'link'];
+const SIDE_FIELDS: [string, string][] = [
+  ['left', 'right'],
+  ['l', 'r'],
+  ['lchild', 'rchild'],
+  ['leftChild', 'rightChild'],
+];
+
+/** The field holding a node's value, if the object looks like a tree or list node. */
+export function nodeValueField(v: Value): string | null {
+  if (!(v instanceof ObjRecord) || v.builtin) return null;
+  const value = VALUE_FIELDS.find((f) => v.props.has(f));
+  if (!value) return null;
+  return treeSides(v) || NEXT_FIELDS.some((f) => v.props.has(f)) ? value : null;
+}
+
+/** The (left, right) field names of a tree node, if any. */
+export function treeSides(v: Value): [string, string] | null {
+  if (!(v instanceof ObjRecord) || v.builtin) return null;
+  return SIDE_FIELDS.find(([a, b]) => v.props.has(a) && v.props.has(b)) ?? null;
+}
+
+export function isNextField(key: string): boolean {
+  return NEXT_FIELDS.includes(key);
+}
+
 export function isTreeNode(v: Value): boolean {
-  return v instanceof ObjRecord && !v.builtin && v.props.has('val') && (v.props.has('left') || v.props.has('right'));
+  return nodeValueField(v) !== null && treeSides(v) !== null;
 }
 
 export function isListNode(v: Value): boolean {
-  return v instanceof ObjRecord && !v.builtin && v.props.has('val') && v.props.has('next') && !v.props.has('left');
+  return nodeValueField(v) !== null && treeSides(v) === null && NEXT_FIELDS.some((f) => (v as ObjRecord).props.has(f));
 }
 
 export class Binding {

@@ -18,7 +18,8 @@ interface ListViewProps {
 
 /** Linked lists as chains of boxes; each chain ends at null, loops back, or joins another chain. */
 export function ListView({ diagram, heap, labels, current, written, created, highlighted, selected, onSelect }: ListViewProps) {
-  const label = (id: number) => nodeValueLabel(heap[id] as ObjectSnap, heap);
+  const label = (id: number) => diagram.labels[id] ?? nodeValueLabel(heap[id] as ObjectSnap, heap);
+  const nextOf = (id: number) => diagram.nextField[id] ?? 'next';
   return (
     <div className="flex flex-col gap-5">
       {diagram.chains.map((chain) => (
@@ -26,7 +27,7 @@ export function ListView({ diagram, heap, labels, current, written, created, hig
         <div key={chain.ids[0]} className="flex items-end overflow-x-auto pb-1 pt-6 [&>*]:shrink-0">
           {chain.ids.map((id) => {
             const tags = labels.get(id) ?? [];
-            const rewired = written.some((w) => w.objId === id && w.key === 'next');
+            const rewired = written.some((w) => w.objId === id && w.key === nextOf(id));
             return (
               <motion.div key={id} layout className="flex items-center">
                 <div className="relative">
@@ -49,7 +50,7 @@ export function ListView({ diagram, heap, labels, current, written, created, hig
                     <span
                       className={`flex items-center border-l px-1.5 text-[10px] font-sans ${rewired ? 'border-amber-300 text-amber-300' : 'border-navy-600 text-navy-400'}`}
                     >
-                      next
+                      {nextOf(id)}
                     </span>
                   </button>
                 </div>

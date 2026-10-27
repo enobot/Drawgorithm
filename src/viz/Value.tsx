@@ -1,10 +1,21 @@
 import { motion } from 'motion/react';
 import type { ComputeDetail, DeclKind, Heap, ValueSnap } from '../trace/types';
-import { formatSnap, isListObj, isTreeObj, nodeValueLabel, type ObjectSnap } from './analysis';
+import { conventionShape, formatSnap, nodeValueLabel, type ObjectSnap } from './analysis';
+import type { ShapeOf } from './bindings';
 import { varColor } from './colors';
 
-/** A primitive (or a short reference) colored by type. */
-export function ValueText({ v, heap, className = '' }: { v: ValueSnap | undefined; heap: Heap; className?: string }) {
+/** A primitive (or a short reference) colored by type. Node references read as "→ node 5" through the bindings. */
+export function ValueText({
+  v,
+  heap,
+  className = '',
+  shapeOf = conventionShape,
+}: {
+  v: ValueSnap | undefined;
+  heap: Heap;
+  className?: string;
+  shapeOf?: ShapeOf;
+}) {
   if (!v) return <span className={`text-navy-400 italic ${className}`}>undefined</span>;
   switch (v.t) {
     case 'number':
@@ -20,8 +31,9 @@ export function ValueText({ v, heap, className = '' }: { v: ValueSnap | undefine
       return <span className={`text-navy-300 ${className}`}>ƒ {v.name}</span>;
     case 'ref': {
       const h = heap[v.id];
-      if (h && (isTreeObj(h) || isListObj(h))) {
-        return <span className={`text-navy-100 ${className}`}>→ node {nodeValueLabel(h as ObjectSnap, heap)}</span>;
+      const shape = shapeOf(h);
+      if (h && shape) {
+        return <span className={`text-navy-100 ${className}`}>→ node {nodeValueLabel(h as ObjectSnap, heap, shape)}</span>;
       }
       return <span className={`text-navy-200 ${className}`}>{formatSnap(v, heap)}</span>;
     }
@@ -42,10 +54,11 @@ interface VarBlockProps {
   /** Seconds to wait before a new block appears (lets source blocks light up first). */
   delay?: number;
   onClick?: () => void;
+  shapeOf?: ShapeOf;
 }
 
 /** A labeled box holding one value: the core "variable as a block" picture. */
-export function VarBlock({ name, value, heap, state, declKind, compute, delay = 0, onClick }: VarBlockProps) {
+export function VarBlock({ name, value, heap, state, declKind, compute, delay = 0, onClick, shapeOf = conventionShape }: VarBlockProps) {
   const color = varColor(name);
   const ring =
     state === 'read'
@@ -53,7 +66,7 @@ export function VarBlock({ name, value, heap, state, declKind, compute, delay = 
       : state === 'changed' || state === 'new'
         ? 'border-amber-300 shadow-[0_0_0_3px_rgb(251_191_36/0.22)]'
         : 'border-navy-600';
-  const isNodeRef = value.t === 'ref' && (isTreeObj(heap[value.id]) || isListObj(heap[value.id]));
+  const isNodeRef = value.t === 'ref' && !!shapeOf(heap[value.id]);
   return (
     <motion.div
       layout="position"
@@ -77,7 +90,7 @@ export function VarBlock({ name, value, heap, state, declKind, compute, delay = 
         className={`min-w-14 h-14 px-3 rounded-xl border-2 bg-navy-850 flex items-center justify-center font-mono text-lg font-medium disabled:cursor-default ${ring} ${isNodeRef ? 'text-[15px]' : ''}`}
         aria-label={`${name} = ${formatSnap(value, heap)}`}
       >
-        <ValueText v={value} heap={heap} />
+        <ValueText v={value} heap={heap} shapeOf={shapeOf} />
       </motion.button>
       {state === 'read' && <span className="text-[11px] font-medium text-teal-300 px-0.5">read</span>}
       {compute && (state === 'new' || state === 'changed') && (

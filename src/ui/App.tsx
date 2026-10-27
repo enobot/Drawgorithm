@@ -1,6 +1,7 @@
 import { MotionConfig } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from 'react-resizable-panels';
+import { canAutoRun } from '../state/live';
 import { currentWork, displayedRun, useStore } from '../state/store';
 import type { LiveResult } from '../trace/types';
 import { EngineStopped, liveInWorker } from '../worker/client';
@@ -47,16 +48,18 @@ function useLiveBuild() {
       busy.current = true;
       try {
         const result = await liveInWorker(text);
-        if (currentWork(useStore.getState()).code === text) setLive(result);
+        if (currentWork(useStore.getState()).code === text) setLive(result, text);
       } catch (e) {
         // A stuck worker is terminated; say so instead of waiting forever. The last drawing stays.
-        if (e instanceof EngineStopped && e.reason !== 'stopped' && currentWork(useStore.getState()).code === text) {
+        const failed = e instanceof EngineStopped && (e.reason === 'timeout' || e.reason === 'crashed');
+        if (failed && currentWork(useStore.getState()).code === text) {
           setLive(
             liveFailure(
               e.reason === 'timeout'
                 ? 'Live Build stopped: the top-level code took too long. Press Run to execute it with the full limits.'
                 : e.message,
             ),
+            text,
           );
         }
       } finally {
@@ -72,6 +75,33 @@ function useLiveBuild() {
     }, 300);
     return () => window.clearTimeout(t);
   }, [code, problemId, setLive]);
+}
+
+/**
+ * After a typing pause, once the code has been validated, run it with the selected inputs.
+ * Changing inputs runs it again. Invalid code is never run; the previous drawing stays.
+ */
+function useAutoRun() {
+  const autoRun = useStore((s) => s.autoRun);
+  const live = useStore((s) => s.live);
+  const code = useStore((s) => currentWork(s).code);
+  const inputsKey = useStore((s) => {
+    const w = currentWork(s);
+    return JSON.stringify([w.inputs, w.expectedText, s.problemId]);
+  });
+  const startRun = useStore((s) => s.startRun);
+  const last = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!autoRun || !canAutoRun(live, code)) return;
+    const key = code + '\u0000' + inputsKey;
+    if (last.current === key) return;
+    const t = window.setTimeout(() => {
+      last.current = key;
+      void startRun({ auto: true });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [autoRun, live, code, inputsKey, startRun]);
 }
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -225,10 +255,11 @@ export function App() {
   const desktop = useIsDesktop();
   const startRun = useStore((s) => s.startRun);
   useLiveBuild();
+  useAutoRun();
   useShortcuts();
   useEffect(() => {
-    // Open with a working demo: the Run tab is ready as soon as the page loads.
-    void startRun({ background: true });
+    // Open with a working demo. With auto-run on, the first validation starts the run instead.
+    if (!useStore.getState().autoRun) void startRun({ background: true });
   }, [startRun]);
 
   return (
@@ -237,7 +268,7 @@ export function App() {
         <header className="flex items-center gap-3 px-4 py-2.5">
           <Logo />
           <h1 className="text-[17px] font-extrabold tracking-tight text-navy-100">Drawgorithms</h1>
-          <p className="hidden text-[13px] text-navy-400 sm:block">See what your JavaScript does, step by step.</p>
+          <p className="hidden text-[13px] text-navy-400 sm:block">See what your code does, step by step.</p>
         </header>
         {desktop ? <DesktopLayout /> : <MobileLayout />}
       </div>

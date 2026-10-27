@@ -4,6 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import type { InputSpec, RunResult } from '../trace/types';
 import { buildListDiagram, buildTreeDiagram, variableRefs } from '../viz/analysis';
+import { readWriteText } from '../viz/Board';
+import { focusOf } from '../viz/focus';
 import { runProgram } from './run';
 
 function call(code: string, entry: string, inputs: Record<string, unknown>, kinds: Record<string, InputSpec['kind']> = {}): RunResult {
@@ -135,6 +137,39 @@ describe('dynamic programming', () => {
     const run = call(code, 'rob', { nums: [2, 7, 9, 3, 1] });
     const writes = run.steps.flatMap((s) => s.effects).filter((e) => e.type === 'index-write');
     expect(writes.length).toBe(5);
+  });
+
+  it('House Robber: each table write is captioned with the cells that step read', () => {
+    const code = `function rob(nums) {
+  const dp = new Array(nums.length + 1).fill(0);
+  dp[1] = nums[0];
+  for (let i = 2; i <= nums.length; i++) {
+    dp[i] = Math.max(dp[i - 1], dp[i - 2] + nums[i - 1]);
+  }
+  return dp[nums.length];
+}`;
+    const run = finished(call(code, 'rob', { nums: [2, 7, 9] }));
+    const step = run.steps.find((s) => s.effects.some((e) => e.type === 'index-write' && e.index === 3))!;
+    const frame = step.frames[step.frames.length - 1];
+    const dpRef = frame.vars.find((v) => v.name === 'dp')!.value as { id: number };
+    const dp = step.heap[dpRef.id] as Extract<(typeof step.heap)[number], { kind: 'array' }>;
+    expect(readWriteText('dp', dp, focusOf(step), step.heap)).toBe('This step read dp[2] and dp[1] and wrote dp[3].');
+  });
+
+  it('LCS: table captions name 2D cells, not the row lookups', () => {
+    const code = `function lcs(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+  return dp[a.length][b.length];
+}`;
+    const run = finished(call(code, 'lcs', { a: 'ab', b: 'ab' }));
+    const step = run.steps.find((s) => s.loc?.line === 5 && s.effects.some((e) => e.type === 'index-write'))!;
+    const frame = step.frames[step.frames.length - 1];
+    const dpRef = frame.vars.find((v) => v.name === 'dp')!.value as { id: number };
+    const dp = step.heap[dpRef.id] as Extract<(typeof step.heap)[number], { kind: 'array' }>;
+    expect(readWriteText('dp', dp, focusOf(step), step.heap)).toBe('This step read dp[0][0] and wrote dp[1][1].');
   });
 
   it('Coin Change (unreachable amounts stay Infinity, answer -1)', () => {

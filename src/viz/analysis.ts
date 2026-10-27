@@ -1,6 +1,7 @@
 // Pure functions that turn recorded state into drawing models.
 // Nothing here guesses values: it only reorganizes what the trace recorded.
 import type { FrameSnap, Heap, HeapSnap, StaticHints, Step, ValueSnap } from '../trace/types';
+import { LIST_CONVENTION, TREE_CONVENTION, type NodeShape, type ShapeOf } from './bindings';
 
 export type ObjectSnap = Extract<HeapSnap, { kind: 'object' }>;
 
@@ -59,15 +60,18 @@ export function formatSnap(v: ValueSnap | undefined, heap: Heap, depth = 0): str
   }
 }
 
+/** The classic reading (val/left/right, val/next), used when no other binding is given. */
+export const conventionShape: ShapeOf = (h) => (isTreeObj(h) ? TREE_CONVENTION : isListObj(h) ? LIST_CONVENTION : null);
+
 /** Display label of a tree or list node: its value, e.g. `5`. */
-export function nodeValueLabel(h: ObjectSnap, heap: Heap): string {
-  const v = field(h, 'val');
+export function nodeValueLabel(h: ObjectSnap, heap: Heap, shape: NodeShape | null = conventionShape(h)): string {
+  const v = field(h, shape && shape.kind !== 'object' ? shape.value : 'val');
   if (v?.t === 'string') return v.v;
   return formatSnap(v, heap, 2);
 }
 
 /** Ids held inside arrays, maps, sets and plain objects (a node in a queue is not detached). */
-function containerRefs(heap: Heap): Set<number> {
+function containerRefs(heap: Heap, shapeOf: ShapeOf): Set<number> {
   const out = new Set<number>();
   const add = (v: ValueSnap) => {
     if (v.t === 'ref') out.add(v.id);
@@ -75,7 +79,7 @@ function containerRefs(heap: Heap): Set<number> {
   for (const h of Object.values(heap)) {
     if (h.kind === 'array' || h.kind === 'set') h.items.forEach(add);
     else if (h.kind === 'map') h.entries.forEach(([k, v]) => (add(k), add(v)));
-    else if (!isTreeObj(h) && !isListObj(h)) h.entries.forEach(([, v]) => add(v));
+    else if (!shapeOf(h)) h.entries.forEach(([, v]) => add(v));
   }
   return out;
 }
@@ -124,22 +128,37 @@ export interface StructureIssue {
 export interface TreeDiagram {
   components: TreeComponent[];
   issues: StructureIssue[];
+  /** Node id → the value shown in the node, read through the binding. */
+  labels: Record<number, string>;
 }
+
+type TreeShape = Extract<NodeShape, { kind: 'tree' }>;
+type ListShape = Extract<NodeShape, { kind: 'list' }>;
 
 /**
  * Lays out every tree node in the heap. `rootOrder` lists node ids in the order
  * variables refer to them, so the tree a variable names comes first.
  * `referenced` holds ids some variable points at (used to spot detached nodes).
+ * `shapeOf` says which objects are tree nodes and which fields hold the value and children.
  */
-export function buildTreeDiagram(heap: Heap, rootOrder: number[], referenced: Set<number>): TreeDiagram {
+export function buildTreeDiagram(
+  heap: Heap,
+  rootOrder: number[],
+  referenced: Set<number>,
+  shapeOf: ShapeOf = conventionShape,
+): TreeDiagram {
+  const isTree = (h: HeapSnap | undefined) => shapeOf(h)?.kind === 'tree';
   const treeIds = Object.values(heap)
-    .filter(isTreeObj)
+    .filter(isTree)
     .map((h) => h.id);
-  if (!treeIds.length) return { components: [], issues: [] };
-  const label = (id: number) => `node ${nodeValueLabel(heap[id] as ObjectSnap, heap)}`;
+  const labels: Record<number, string> = {};
+  for (const id of treeIds) labels[id] = nodeValueLabel(heap[id] as ObjectSnap, heap, shapeOf(heap[id]));
+  if (!treeIds.length) return { components: [], issues: [], labels };
+  const label = (id: number) => `node ${labels[id]}`;
+  const sideField = (id: number, side: 'left' | 'right') => (shapeOf(heap[id]) as TreeShape)[side];
   const childOf = (id: number, side: 'left' | 'right') => {
-    const c = refId(field(heap[id], side));
-    return c !== null && isTreeObj(heap[c]) ? c : null;
+    const c = refId(field(heap[id], sideField(id, side)));
+    return c !== null && isTree(heap[c]) ? c : null;
   };
   const parents = new Map<number, { id: number; side: 'left' | 'right' }[]>();
   for (const id of treeIds) {
@@ -169,7 +188,7 @@ export function buildTreeDiagram(heap: Heap, rootOrder: number[], referenced: Se
       comp.nodes.push({ id, depth, path, slotX: (index + 0.5) / 2 ** depth, orderX: 0 });
       comp.depth = Math.max(comp.depth, depth);
       for (const side of ['left', 'right'] as const) {
-        const raw = field(heap[id], side);
+        const raw = field(heap[id], sideField(id, side));
         const c = childOf(id, side);
         if (c === null) {
           if (raw && raw.t === 'null') {
@@ -224,7 +243,7 @@ export function buildTreeDiagram(heap: Heap, rootOrder: number[], referenced: Se
       });
     }
   }
-  const held = containerRefs(heap);
+  const held = containerRefs(heap, shapeOf);
   for (const comp of components) {
     if (!parents.has(comp.rootId) && !referenced.has(comp.rootId) && !held.has(comp.rootId) && rootOrder.length > 0) {
       issues.push({
@@ -234,7 +253,7 @@ export function buildTreeDiagram(heap: Heap, rootOrder: number[], referenced: Se
       });
     }
   }
-  return { components, issues };
+  return { components, issues, labels };
 }
 
 // ---------------------------------------------------------------- linked lists
@@ -248,16 +267,32 @@ export interface ListChain {
 export interface ListDiagram {
   chains: ListChain[];
   issues: StructureIssue[];
+  /** Node id → the value shown in the node, read through the binding. */
+  labels: Record<number, string>;
+  /** Node id → the field that links to the next node (e.g. next, nxt). */
+  nextField: Record<number, string>;
 }
 
-export function buildListDiagram(heap: Heap, rootOrder: number[], referenced: Set<number>): ListDiagram {
+export function buildListDiagram(
+  heap: Heap,
+  rootOrder: number[],
+  referenced: Set<number>,
+  shapeOf: ShapeOf = conventionShape,
+): ListDiagram {
+  const isList = (h: HeapSnap | undefined) => shapeOf(h)?.kind === 'list';
   const listIds = Object.values(heap)
-    .filter(isListObj)
+    .filter(isList)
     .map((h) => h.id);
-  if (!listIds.length) return { chains: [], issues: [] };
+  const labels: Record<number, string> = {};
+  const nextField: Record<number, string> = {};
+  for (const id of listIds) {
+    labels[id] = nodeValueLabel(heap[id] as ObjectSnap, heap, shapeOf(heap[id]));
+    nextField[id] = (shapeOf(heap[id]) as ListShape).next;
+  }
+  if (!listIds.length) return { chains: [], issues: [], labels, nextField };
   const next = (id: number) => {
-    const n = refId(field(heap[id], 'next'));
-    return n !== null && isListObj(heap[n]) ? n : null;
+    const n = refId(field(heap[id], nextField[id]));
+    return n !== null && isList(heap[n]) ? n : null;
   };
   const indeg = new Map<number, number>();
   for (const id of listIds) {
@@ -269,7 +304,7 @@ export function buildListDiagram(heap: Heap, rootOrder: number[], referenced: Se
   const visited = new Set<number>();
   const chains: ListChain[] = [];
   const issues: StructureIssue[] = [];
-  const label = (id: number) => `node ${nodeValueLabel(heap[id] as ObjectSnap, heap)}`;
+  const label = (id: number) => `node ${labels[id]}`;
 
   const follow = (start: number) => {
     const ids: number[] = [];
@@ -281,7 +316,7 @@ export function buildListDiagram(heap: Heap, rootOrder: number[], referenced: Se
         issues.push({
           kind: 'cycle',
           ids: [ids[ids.length - 1], cur],
-          text: `Cycle: ${label(ids[ids.length - 1])}'s next points back to ${label(cur)}. Walking this list would never reach null.`,
+          text: `Cycle: ${label(ids[ids.length - 1])}'s ${nextField[ids[ids.length - 1]]} points back to ${label(cur)}. Walking this list would never reach null.`,
         });
         break;
       }
@@ -297,14 +332,14 @@ export function buildListDiagram(heap: Heap, rootOrder: number[], referenced: Se
   };
   for (const h of heads) if (!visited.has(h)) follow(h);
   for (const id of order) if (!visited.has(id)) follow(id);
-  const held = containerRefs(heap);
+  const held = containerRefs(heap, shapeOf);
   for (const c of chains) {
     const head = c.ids[0];
     if (head !== undefined && !indeg.has(head) && !referenced.has(head) && !held.has(head) && rootOrder.length > 0) {
       issues.push({ kind: 'detached', ids: [head], text: `${label(head)} is detached: nothing points to it any more.` });
     }
   }
-  return { chains, issues };
+  return { chains, issues, labels, nextField };
 }
 
 // ---------------------------------------------------------------- variables → structures
@@ -328,13 +363,17 @@ export function variableRefs(frames: FrameSnap[]): { order: number[]; referenced
  * Variable labels pointing at each node: active frame strongly, callers faintly.
  * A name shows once per node even when many recursive calls use it.
  */
-export function nodeLabels(frames: FrameSnap[], heap: Heap): Map<number, { name: string; active: boolean; frame: string }[]> {
+export function nodeLabels(
+  frames: FrameSnap[],
+  heap: Heap,
+  shapeOf: ShapeOf = conventionShape,
+): Map<number, { name: string; active: boolean; frame: string }[]> {
   const out = new Map<number, { name: string; active: boolean; frame: string }[]>();
   frames.forEach((f, i) => {
     const active = i === frames.length - 1;
     for (const v of f.vars) {
       const id = refId(v.value);
-      if (id === null || !(isTreeObj(heap[id]) || isListObj(heap[id]))) continue;
+      if (id === null || !shapeOf(heap[id])) continue;
       const list = out.get(id) ?? [];
       const same = list.find((l) => l.name === v.name);
       if (same) {
@@ -353,12 +392,12 @@ export function nodeLabels(frames: FrameSnap[], heap: Heap): Map<number, { name:
 const CURRENT_NAMES = ['node', 'curr', 'current', 'cur', 'n', 'temp', 'p'];
 
 /** The node the active frame is working on, if any. */
-export function currentNode(step: Step): number | null {
+export function currentNode(step: Step, shapeOf: ShapeOf = conventionShape): number | null {
   const frame = step.frames[step.frames.length - 1];
   if (!frame) return null;
   const isNode = (v: ValueSnap) => {
     const id = refId(v);
-    return id !== null && (isTreeObj(step.heap[id]) || isListObj(step.heap[id])) ? id : null;
+    return id !== null && shapeOf(step.heap[id]) ? id : null;
   };
   for (const name of CURRENT_NAMES) {
     const v = frame.vars.find((x) => x.name === name);
@@ -383,19 +422,19 @@ export interface TraversalIndex {
   returns: { step: number; node: number; value: string }[];
 }
 
-export function buildTraversalIndex(steps: Step[]): TraversalIndex {
+export function buildTraversalIndex(steps: Step[], shapeOf: ShapeOf = conventionShape): TraversalIndex {
   const current: (number | null)[] = [];
   const firstVisit = new Map<number, number>();
   const returns: TraversalIndex['returns'] = [];
   steps.forEach((s, i) => {
-    const c = s.kind === 'done' ? null : currentNode(s);
+    const c = s.kind === 'done' ? null : currentNode(s, shapeOf);
     current.push(c);
     if (c !== null && !firstVisit.has(c)) firstVisit.set(c, i);
     if (s.kind === 'return') {
       const frame = s.frames[s.frames.length - 1];
       const param = frame?.vars.find((v) => v.declKind === 'param');
       const id = param ? refId(param.value) : null;
-      if (id !== null && isTreeObj(s.heap[id]) && frame.returning) {
+      if (id !== null && shapeOf(s.heap[id])?.kind === 'tree' && frame.returning) {
         returns.push({ step: i, node: id, value: formatSnap(frame.returning, s.heap) });
       }
     }

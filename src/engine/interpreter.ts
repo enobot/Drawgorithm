@@ -32,7 +32,10 @@ import {
   Scope,
   isHeapValue,
   isListNode,
+  isNextField,
   isTreeNode,
+  nodeValueField,
+  treeSides,
   type FnNode,
   type Frame,
   type HeapValue,
@@ -183,9 +186,10 @@ export class Interpreter implements Host, NodeNamer {
   // ---------------------------------------------------------------- naming
 
   nodeLabel(obj: ObjRecord): string {
-    const val = obj.props.get('val');
+    const field = nodeValueField(obj) ?? 'val';
+    const val = obj.props.get(field);
     const shown = typeof val === 'string' ? JSON.stringify(val) : fmt(val, this, 2);
-    const twins = this.nodes.filter((n) => n !== obj && n.className === obj.className && n.props.get('val') === val);
+    const twins = this.nodes.filter((n) => n !== obj && n.className === obj.className && n.props.get(field) === val);
     return twins.length ? `node ${shown} (#${this.idOf(obj)})` : `node ${shown}`;
   }
 
@@ -1866,25 +1870,28 @@ export class Interpreter implements Host, NodeNamer {
     const before = this.fs(e.before);
     const isNodeRef = (s: ValueSnap) =>
       s.t === 'ref' && (isTreeNode(this.objects.get(s.id) as Value) || isListNode(this.objects.get(s.id) as Value));
-    if (isTreeNode(obj) && (e.key === 'left' || e.key === 'right')) {
+    const sides = treeSides(obj);
+    // Custom field names (l/r, lchild/rchild) are described as left/right.
+    const side = sides && isTreeNode(obj) ? (e.key === sides[0] ? 'left' : e.key === sides[1] ? 'right' : null) : null;
+    if (side) {
       if (e.after.t === 'ref' && isNodeRef(e.after)) {
         if (e.before.t === 'ref' && e.before.id !== e.after.id) {
-          return `replace the ${e.key} child of ${owner}: ${before} → ${after}. ${capitalize(before)} is no longer connected to ${owner}`;
+          return `replace the ${side} child of ${owner}: ${before} → ${after}. ${capitalize(before)} is no longer connected to ${owner}`;
         }
-        if (e.before.t === 'ref' && e.before.id === e.after.id) return `${owner}'s ${e.key} child is still ${after}`;
-        return `connect ${after} as the ${e.key} child of ${owner}`;
+        if (e.before.t === 'ref' && e.before.id === e.after.id) return `${owner}'s ${side} child is still ${after}`;
+        return `connect ${after} as the ${side} child of ${owner}`;
       }
       if (e.after.t === 'null' || e.after.t === 'undefined') {
         return e.before.t === 'ref'
-          ? `remove ${before} as the ${e.key} child of ${owner} (set it to ${after})`
-          : `${owner}'s ${e.key} child stays ${after}`;
+          ? `remove ${before} as the ${side} child of ${owner} (set it to ${after})`
+          : `${owner}'s ${side} child stays ${after}`;
       }
       return `set the ${e.key} of ${owner} to ${after}`;
     }
-    if (isListNode(obj) && e.key === 'next') {
+    if (isListNode(obj) && isNextField(e.key)) {
       if (e.after.t === 'ref')
-        return `point ${owner}'s next to ${after}${e.before.t === 'ref' && e.before.id !== e.after.id ? ` (it pointed to ${before})` : ''}`;
-      return `point ${owner}'s next to ${after}${e.before.t === 'ref' ? ` (it pointed to ${before})` : ''}`;
+        return `point ${owner}'s ${e.key} to ${after}${e.before.t === 'ref' && e.before.id !== e.after.id ? ` (it pointed to ${before})` : ''}`;
+      return `point ${owner}'s ${e.key} to ${after}${e.before.t === 'ref' ? ` (it pointed to ${before})` : ''}`;
     }
     const name = this.nameFor(e.objId) ?? owner;
     return `set ${name}.${e.key} = ${after}${e.before.t !== 'undefined' ? ` (it was ${before})` : ''}`;

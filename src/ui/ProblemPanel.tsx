@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
-import { parseValue } from '../problems/pasted';
+import { parseValue, suggestStructures } from '../problems/pasted';
+import { deepEqual } from '../problems/compare';
+import { missingInputs } from '../problems/inputs';
 import { CUSTOM_ID, currentWork, problemFor, useStore, type InputRow } from '../state/store';
 import type { FrameSnap, InputKind, Step } from '../trace/types';
 import { buildListDiagram, buildTreeDiagram, nodeLabels, refId } from '../viz/analysis';
@@ -59,6 +61,7 @@ function PasteBox() {
   const setCustomText = useStore((s) => s.setCustomText);
   const setCustomEntry = useStore((s) => s.setCustomEntry);
   const p = problemFor(CUSTOM_ID, custom);
+  const suggestions = useMemo(() => suggestStructures(custom.text), [custom.text]);
   return (
     <section className="flex flex-col gap-2">
       <label htmlFor="paste" className="section-title">
@@ -74,7 +77,7 @@ function PasteBox() {
       />
       <p className="rounded-lg border border-navy-600 bg-navy-850 px-3 py-2 text-[13px] leading-relaxed text-navy-200">
         Pasting text does not create an animation by itself. Drawgorithms reads the examples to fill in the inputs and expected output. The
-        drawing always comes from running the JavaScript you write.
+        drawing always comes from running the code you write.
       </p>
       {custom.text.trim() && (
         <p className="text-[12.5px] text-navy-300">
@@ -82,6 +85,22 @@ function PasteBox() {
           {p.params.length ? ` with inputs ${p.params.map((x) => x.name).join(', ')}` : ''}.
           {p.cases.length === 0 && ' Add lines like “Input: x = [1,2]” and “Output: 3”, or type inputs below.'}
         </p>
+      )}
+      {suggestions.length > 0 && (
+        <div className="text-[12.5px] text-navy-300">
+          <p>Suggested from the description (not checked against your code):</p>
+          <ul className="mt-1 flex flex-wrap gap-1.5">
+            {suggestions.map((s) => (
+              <li
+                key={s.structure}
+                className="rounded-md border border-navy-600 px-1.5 py-0.5"
+                title={`The description says “${s.because}”.`}
+              >
+                {s.structure} <span className="text-navy-500">(“{s.because}”)</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <label className="flex flex-col gap-1 text-[13px] text-navy-300">
         Function Run should call
@@ -106,9 +125,19 @@ export function ProblemPanel() {
   const setInputKind = useStore((s) => s.setInputKind);
   const setExpected = useStore((s) => s.setExpected);
   const selectProblem = useStore((s) => s.selectProblem);
+  const addInput = useStore((s) => s.addInput);
+  const removeInput = useStore((s) => s.removeInput);
+  const hints = useStore((s) => (s.live.result?.status === 'pending' ? s.live.lastDrawn?.hints : s.live.result?.hints));
   const p = problemFor(problemId, custom);
   const isCustom = problemId === CUSTOM_ID;
   const expectedOk = !work.expectedText.trim() || parseValue(work.expectedText).ok;
+  const missing = missingInputs(
+    p,
+    work.inputs.map((r) => r.name),
+    hints,
+  );
+  const selectedCase = p.cases[work.caseIndex];
+  const inputsEdited = !!selectedCase && work.inputs.some((r) => !deepEqual(parseValue(r.text).value, selectedCase.inputs[r.name]));
 
   return (
     <div className="flex h-full flex-col gap-5 overflow-y-auto p-4">
@@ -173,6 +202,16 @@ export function ProblemPanel() {
                   <label htmlFor={`in-${row.name}`} className="font-mono text-[13px] font-semibold text-navy-100">
                     {row.name}
                   </label>
+                  {isCustom && (
+                    <button
+                      type="button"
+                      onClick={() => removeInput(row.name)}
+                      className="ml-auto text-[11.5px] text-navy-400 hover:text-navy-100"
+                      aria-label={`Remove input ${row.name}`}
+                    >
+                      remove
+                    </button>
+                  )}
                   <select
                     value={row.kind}
                     onChange={(e) => setInputKind(row.name, e.target.value as InputKind)}
@@ -199,9 +238,24 @@ export function ProblemPanel() {
               </div>
             );
           })}
-        {p.mode === 'function' && work.inputs.length === 0 && (
+        {p.mode === 'function' && missing.names.length > 0 && (
+          <div role="status" className="rounded-lg border border-amber-400/60 bg-amber-400/10 px-3 py-2 text-[13px] text-amber-100">
+            <p>
+              Your function {missing.fn}() takes {missing.names.map((n) => `“${n}”`).join(', ')}, but there is no input with{' '}
+              {missing.names.length === 1 ? 'that name' : 'those names'}. It would receive undefined.
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {missing.names.map((n) => (
+                <button key={n} type="button" className="btn-outline h-7" onClick={() => addInput(n)}>
+                  Add input {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {p.mode === 'function' && work.inputs.length === 0 && missing.names.length === 0 && (
           <p className="text-[13px] text-navy-300">
-            No inputs found. Paste a problem with examples, or Run calls your function with no arguments.
+            No inputs yet. Paste a problem with examples, or write your function and its parameters will be offered here.
           </p>
         )}
         <label className="flex flex-col gap-1.5">
@@ -217,6 +271,11 @@ export function ProblemPanel() {
             className={`field ${expectedOk ? '' : 'border-rose-400'}`}
           />
         </label>
+        {inputsEdited && work.expectedText.trim() && (
+          <p className="text-[12.5px] text-amber-200">
+            You changed the inputs, so this expected output (from {selectedCase.label}) may no longer apply. Update or clear it.
+          </p>
+        )}
         {p.params.some((x) => x.kind === 'tree') && (
           <p className="text-[12px] text-navy-400">
             Trees use level order: [5,3,8,null,4] means 5 has children 3 and 8, and 4 is the right child of 3.

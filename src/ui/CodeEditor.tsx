@@ -54,7 +54,7 @@ export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks
       renderLineHighlight: 'none',
       tabSize: 2,
       padding: { top: 12, bottom: 12 },
-      ariaLabel: 'JavaScript code editor. Press Control+Enter to run.',
+      ariaLabel: 'Code editor. Press Control+Enter to run.',
       wordBasedSuggestions: 'currentDocument',
       fixedOverflowWidgets: true,
       // Monaco's EditContext input is marked experimental; the textarea input is the stable path.

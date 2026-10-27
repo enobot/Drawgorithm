@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
 import { useStore } from '../state/store';
 import { CallStack, FrameContent, Structures, type BoardContext } from '../viz/Board';
+import { NO_OVERRIDES, resolveBindings } from '../viz/bindings';
 import { EMPTY_FOCUS } from '../viz/focus';
+import { BindingsPanel } from './BindingsPanel';
 import { NodeDetails } from './NodeDetails';
 
 /**
@@ -24,6 +26,11 @@ export function BuildView() {
     () => (drawn && cursorLine !== null ? drawn.lines.find((l) => l.line === cursorLine) : undefined),
     [drawn, cursorLine],
   );
+  const overrides = useStore((s) => s.bindings[s.problemId]) ?? NO_OVERRIDES;
+  const bindings = useMemo(
+    () => (drawn && step ? resolveBindings(step.heap, step.frames, drawn.hints, overrides) : null),
+    [drawn, step, overrides],
+  );
 
   if (!current && !drawn) {
     return <p className="p-6 text-[14px] text-navy-300">Reading your code…</p>;
@@ -34,7 +41,8 @@ export function BuildView() {
   const ctx: BoardContext | null = step
     ? {
         step,
-        hints: drawn!.hints,
+        hints: bindings!.hints,
+        shapeOf: bindings!.shapeOf,
         focus: EMPTY_FOCUS,
         highlightedIds: new Set(lineInfo?.objIds ?? []),
         highlightedEdges: lineInfo?.edges,
@@ -86,6 +94,7 @@ export function BuildView() {
           </div>
         )}
       </div>
+      {bindings && <BindingsPanel bindings={bindings} />}
       <div className="board-grid min-h-0 flex-1 overflow-auto px-4 py-4">
         {ctx && hasDrawing ? (
           <div className="flex flex-col gap-5">
@@ -96,6 +105,7 @@ export function BuildView() {
                 step={step!}
                 heap={step!.heap}
                 info={drawn!.objects[selectedNode]}
+                shapeOf={bindings!.shapeOf}
                 onClose={() => selectNode(null)}
               />
             )}
