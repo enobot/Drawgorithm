@@ -75,6 +75,7 @@ interface CallOptions {
 }
 
 const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+const STARTS_WITH_VERB = /^(add|remove|take|store|update|set|connect|replace|point|print|sort|reverse|fill|splice|clear|resize|change)\b/;
 
 export class Interpreter implements Host, NodeNamer {
   readonly steps: Step[] = [];
@@ -1795,7 +1796,8 @@ export class Interpreter implements Host, NodeNamer {
       const p = this.phrase(e, false);
       if (p && !out.includes(p)) out.push(p);
     }
-    return out.map((p) => capitalize(p) + '.').join(' ');
+    // Capitalize sentences that start with a verb; never a variable name like `seen.get(2)`.
+    return out.map((p) => (STARTS_WITH_VERB.test(p) ? capitalize(p) : p) + '.').join(' ');
   }
 
   private phrase(e: Effect, inline: boolean): string | null {

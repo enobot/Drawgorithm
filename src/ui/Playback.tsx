@@ -66,7 +66,7 @@ export function Playback({ total }: { total: number }) {
         </button>
         <button
           type="button"
-          className="inline-flex items-center justify-center size-9 rounded-full bg-teal-400 text-navy-950 hover:bg-teal-300 disabled:opacity-40"
+          className="inline-flex items-center justify-center size-9 rounded-full bg-teal-400 text-navy-950 hover:bg-teal-300 disabled:opacity-40 pointer-coarse:size-12"
           onClick={() => {
             if (atEnd) setStep(0);
             setPlaying(!playing);
@@ -88,7 +88,8 @@ export function Playback({ total }: { total: number }) {
           <Icon d={ICONS.forward} label="Step forward" />
         </button>
       </div>
-      <label className="flex min-w-40 flex-1 items-center gap-3">
+      {/* On phones the timeline gets its own full-width row under the buttons and speed. */}
+      <label className="flex min-w-40 flex-1 items-center gap-3 max-sm:order-last max-sm:basis-full">
         <span className="sr-only">Timeline</span>
         <input
           type="range"
@@ -99,19 +100,19 @@ export function Playback({ total }: { total: number }) {
             setPlaying(false);
             setStep(Number(e.target.value));
           }}
-          className="h-1.5 flex-1 cursor-pointer accent-teal-400"
+          className="h-1.5 flex-1 cursor-pointer accent-teal-400 pointer-coarse:h-11"
           aria-valuetext={`Step ${step + 1} of ${total}`}
         />
-        <span className="w-24 text-right text-[12px] tabular-nums text-navy-300">
+        <span className="min-w-24 whitespace-nowrap text-right text-[12px] tabular-nums text-navy-300">
           Step {step + 1} of {total}
         </span>
       </label>
-      <label className="flex items-center gap-1.5 text-[12px] text-navy-300">
+      <label className="flex items-center gap-1.5 text-[12px] text-navy-300 max-sm:ml-auto">
         Speed
         <select
           value={speed}
           onChange={(e) => setSpeed(Number(e.target.value))}
-          className="rounded-md border border-navy-600 bg-navy-900 px-1.5 py-1 text-[12px] text-navy-100 hover:border-navy-400"
+          className="rounded-md border border-navy-600 bg-navy-900 px-1.5 py-1 text-[12px] text-navy-100 hover:border-navy-400 pointer-coarse:min-h-11"
         >
           {SPEEDS.map((s) => (
             <option key={s} value={s}>

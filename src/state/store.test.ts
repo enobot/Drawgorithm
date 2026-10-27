@@ -94,3 +94,15 @@ describe('stale-result cancellation', () => {
     expect(run.lastGood?.codeAtRun).toBe('let sum = 5;');
   });
 });
+
+describe('board zoom', () => {
+  it('stays within its limits, whatever the input', () => {
+    const s = useStore.getState();
+    s.setBoardZoom(10);
+    expect(useStore.getState().boardZoom).toBe(2.5);
+    s.setBoardZoom(0.01);
+    expect(useStore.getState().boardZoom).toBe(0.4);
+    s.setBoardZoom(Number.NaN);
+    expect(useStore.getState().boardZoom).toBe(1);
+  });
+});

@@ -28,20 +28,32 @@ interface Props {
   formatNonce: number;
 }
 
+// The text model outlives the editor widget, so switching layouts (rotating a tablet,
+// resizing past a breakpoint) keeps the undo history, cursor and scroll position.
+let sharedModel: monaco.editor.ITextModel | null = null;
+let savedViewState: monaco.editor.ICodeEditorViewState | null = null;
+
+function modelFor(value: string): monaco.editor.ITextModel {
+  if (!sharedModel || sharedModel.isDisposed()) sharedModel = monaco.editor.createModel(value, 'javascript');
+  return sharedModel;
+}
+
 export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks, reveal, formatNonce }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const decorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   const callbacks = useRef({ onChange, onRun, onCursorLine, onSave });
+  // A remounted editor must not repeat a format that was requested before it existed.
+  const handledFormat = useRef(formatNonce);
   useEffect(() => {
     callbacks.current = { onChange, onRun, onCursorLine, onSave };
   });
 
   useEffect(() => {
     if (!host.current) return;
+    const model = modelFor(value);
     const editor = monaco.editor.create(host.current, {
-      value,
-      language: 'javascript',
+      model,
       theme: 'drawgorithms',
       fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
       fontSize: 14,
@@ -63,6 +75,7 @@ export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks
       scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
     });
     editorRef.current = editor;
+    if (savedViewState) editor.restoreViewState(savedViewState);
     decorations.current = editor.createDecorationsCollection();
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => callbacks.current.onRun());
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => callbacks.current.onSave());
@@ -71,7 +84,9 @@ export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks
     return () => {
       sub1.dispose();
       sub2.dispose();
-      editor.getModel()?.dispose();
+      savedViewState = editor.saveViewState();
+      // Decorations belong to this widget; the shared model keeps only the text and its history.
+      decorations.current?.clear();
       editor.dispose();
       editorRef.current = null;
     };
@@ -137,7 +152,9 @@ export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks
   }, [reveal]);
 
   useEffect(() => {
-    if (formatNonce > 0) void editorRef.current?.getAction('editor.action.formatDocument')?.run();
+    if (formatNonce === handledFormat.current) return;
+    handledFormat.current = formatNonce;
+    void editorRef.current?.getAction('editor.action.formatDocument')?.run();
   }, [formatNonce]);
 
   return <div ref={host} className="h-full w-full" />;

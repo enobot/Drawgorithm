@@ -1,12 +1,14 @@
 import { MotionConfig } from 'motion/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from 'react-resizable-panels';
+import { withoutDeepLink, type Pane } from '../state/deepLink';
 import { canAutoRun } from '../state/live';
 import { currentWork, displayedRun, useStore } from '../state/store';
 import type { LiveResult } from '../trace/types';
 import { EngineStopped, liveInWorker } from '../worker/client';
 import { EditorPanel } from './EditorPanel';
 import { ProblemPanel } from './ProblemPanel';
+import { useMedia } from './useMedia';
 import { VizPanel } from './VizPanel';
 
 function Logo() {
@@ -135,16 +137,51 @@ function useShortcuts() {
   }, []);
 }
 
-function useIsDesktop() {
-  const query = '(min-width: 1024px)';
-  const [desktop, setDesktop] = useState(() => window.matchMedia(query).matches);
+type LayoutMode = 'wide' | 'medium' | 'narrow';
+
+// Phones in landscape are wide but short: two side-by-side panels would leave each too
+// little room, so they get the one-panel-at-a-time layout too.
+const NARROW = '(max-width: 767.98px), (max-height: 519.98px) and (max-width: 1199.98px)';
+const MEDIUM = '(max-width: 1199.98px)';
+
+function useLayoutMode(): LayoutMode {
+  const narrow = useMedia(NARROW);
+  const medium = useMedia(MEDIUM);
+  return narrow ? 'narrow' : medium ? 'medium' : 'wide';
+}
+
+/**
+ * iOS Safari keeps the layout viewport when the on-screen keyboard opens, so the app
+ * would extend under the keyboard. Size the app to the visible area instead.
+ */
+function useVisibleHeight() {
   useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = () => setDesktop(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    const update = () => {
+      // A shorter visual viewport at normal scale means a keyboard; a pinch zoom (scale > 1) is left alone.
+      const keyboard = vv.scale <= 1.01 && vv.height < window.innerHeight - 1;
+      if (!keyboard) {
+        root.style.removeProperty('--app-height');
+        return;
+      }
+      root.style.setProperty('--app-height', `${Math.round(vv.height)}px`);
+      // Safari may scroll the page to reveal the caret; the app scrolls inside its panels instead.
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    return () => vv.removeEventListener('resize', update);
   }, []);
-  return desktop;
+}
+
+/** Opening a demo link once is enough: drop its parameters so a reload keeps the visitor's own choices. */
+function useConsumeDeepLink() {
+  useEffect(() => {
+    const rest = withoutDeepLink(window.location.search);
+    if (rest !== window.location.search) window.history.replaceState(null, '', window.location.pathname + rest + window.location.hash);
+  }, []);
 }
 
 function DesktopLayout() {
@@ -219,44 +256,123 @@ function PanelToggles({
   );
 }
 
-function MobileLayout() {
+const PANE_LABEL: Record<Pane, string> = { problem: 'Problem', code: 'Code', visual: 'Visual' };
+
+/** Tabs for switching panels on smaller screens. */
+function PaneTabs({ panes, active, onSelect, label }: { panes: Pane[]; active: Pane; onSelect: (p: Pane) => void; label: string }) {
+  return (
+    <div role="tablist" aria-label={label} className="flex rounded-full bg-navy-950 p-1">
+      {panes.map((p) => (
+        <button
+          key={p}
+          type="button"
+          role="tab"
+          id={`pane-tab-${p}`}
+          aria-selected={active === p}
+          aria-controls={`pane-${p}`}
+          onClick={() => onSelect(p)}
+          className={`min-h-9 flex-1 rounded-full px-4 text-[13.5px] font-semibold transition-colors pointer-coarse:min-h-11 ${
+            active === p ? 'bg-navy-700 text-navy-50' : 'text-navy-300 hover:text-navy-100'
+          }`}
+        >
+          {PANE_LABEL[p]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One panel of a tabbed layout. Hidden panels stay mounted, so switching tabs keeps
+ * the editor's cursor and undo history, scroll positions and half-typed inputs.
+ */
+function PaneSlot({ pane, visible, children }: { pane: Pane; visible: boolean; children: ReactNode }) {
+  return (
+    <div role="tabpanel" id={`pane-${pane}`} aria-labelledby={`pane-tab-${pane}`} hidden={!visible} className="h-full min-h-0">
+      {children}
+    </div>
+  );
+}
+
+/** Tablets and small laptop windows: the drawing beside a tabbed Problem/Code panel. */
+function MediumLayout() {
   const pane = useStore((s) => s.mobilePane);
   const setPane = useStore((s) => s.setMobilePane);
-  const panes = [
-    { id: 'problem', label: 'Problem' },
-    { id: 'code', label: 'Code' },
-    { id: 'visual', label: 'Visual' },
-  ] as const;
+  const side: Pane = pane === 'problem' ? 'problem' : 'code';
+  const sideRef = usePanelRef();
+  const [sideHidden, setSideHidden] = useState(false);
+  const layout = useDefaultLayout({ id: 'drawgorithms-panels-medium', storage: localStorage });
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-2">
-      <div role="tablist" aria-label="Panels" className="flex rounded-lg bg-navy-900 p-0.5">
-        {panes.map((p) => (
-          <button
-            key={p.id}
-            role="tab"
-            aria-selected={pane === p.id}
-            onClick={() => setPane(p.id)}
-            className={`flex-1 rounded-md py-1.5 text-[13px] font-semibold ${pane === p.id ? 'bg-navy-700 text-navy-100' : 'text-navy-300'}`}
-          >
-            {p.label}
-          </button>
-        ))}
+    <>
+      <div className="flex items-center gap-2 px-3 pb-2">
+        <div className={sideHidden ? 'invisible' : ''}>
+          <PaneTabs panes={['problem', 'code']} active={side} onSelect={setPane} label="Left panel" />
+        </div>
+        <button
+          type="button"
+          className="btn-quiet ml-auto"
+          aria-pressed={!sideHidden}
+          onClick={() => (sideRef.current?.isCollapsed() ? sideRef.current.expand() : sideRef.current?.collapse())}
+        >
+          {sideHidden ? `Show ${PANE_LABEL[side].toLowerCase()}` : 'Widen drawing'}
+        </button>
       </div>
+      <Group
+        orientation="horizontal"
+        className="min-h-0 flex-1 px-3 pb-3"
+        defaultLayout={layout.defaultLayout}
+        onLayoutChanged={(l, meta) => {
+          layout.onLayoutChanged(l, meta);
+          setSideHidden(!!sideRef.current?.isCollapsed());
+        }}
+      >
+        <Panel id="side" panelRef={sideRef} defaultSize="44" minSize="30" collapsible collapsedSize="0" className="panel overflow-hidden">
+          <PaneSlot pane="problem" visible={side === 'problem'}>
+            <ProblemPanel />
+          </PaneSlot>
+          <PaneSlot pane="code" visible={side === 'code'}>
+            <EditorPanel />
+          </PaneSlot>
+        </Panel>
+        <Separator aria-label="Resize the drawing" />
+        <Panel id="visual" defaultSize="56" minSize="35" className="panel overflow-hidden">
+          <VizPanel />
+        </Panel>
+      </Group>
+    </>
+  );
+}
+
+/** Phones: one panel at a time. */
+function NarrowLayout() {
+  const pane = useStore((s) => s.mobilePane);
+  const setPane = useStore((s) => s.setMobilePane);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] short:pt-1.5">
+      <PaneTabs panes={['problem', 'code', 'visual']} active={pane} onSelect={setPane} label="Panels" />
       <div className="panel min-h-0 flex-1 overflow-hidden">
-        {pane === 'problem' && <ProblemPanel />}
-        {pane === 'code' && <EditorPanel />}
-        {pane === 'visual' && <VizPanel />}
+        <PaneSlot pane="problem" visible={pane === 'problem'}>
+          <ProblemPanel />
+        </PaneSlot>
+        <PaneSlot pane="code" visible={pane === 'code'}>
+          <EditorPanel />
+        </PaneSlot>
+        <PaneSlot pane="visual" visible={pane === 'visual'}>
+          <VizPanel />
+        </PaneSlot>
       </div>
     </div>
   );
 }
 
 export function App() {
-  const desktop = useIsDesktop();
+  const mode = useLayoutMode();
   const startRun = useStore((s) => s.startRun);
   useLiveBuild();
   useAutoRun();
   useShortcuts();
+  useVisibleHeight();
+  useConsumeDeepLink();
   useEffect(() => {
     // Open with a working demo. With auto-run on, the first validation starts the run instead.
     if (!useStore.getState().autoRun) void startRun({ background: true });
@@ -264,13 +380,14 @@ export function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="relative flex h-full flex-col">
-        <header className="flex items-center gap-3 px-4 py-2.5">
+      <div className="app-shell relative flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
+        {/* Phones in landscape need every pixel of height for the panels, so the header steps aside. */}
+        <header className="flex items-center gap-3 px-4 py-2.5 short:sr-only">
           <Logo />
           <h1 className="text-[17px] font-extrabold tracking-tight text-navy-100">Drawgorithms</h1>
           <p className="hidden text-[13px] text-navy-400 sm:block">See what your code does, step by step.</p>
         </header>
-        {desktop ? <DesktopLayout /> : <MobileLayout />}
+        {mode === 'wide' ? <DesktopLayout /> : mode === 'medium' ? <MediumLayout /> : <NarrowLayout />}
       </div>
     </MotionConfig>
   );

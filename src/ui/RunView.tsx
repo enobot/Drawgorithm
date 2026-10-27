@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { compareRun } from '../problems/compare';
 import { currentWork, displayedRun, problemFor, runFailed, useStore, type RunState } from '../state/store';
 import type { EngineError, Step, StepKind } from '../trace/types';
@@ -10,6 +10,8 @@ import { BindingsPanel } from './BindingsPanel';
 import { Inspector } from './Inspector';
 import { NodeDetails } from './NodeDetails';
 import { Playback } from './Playback';
+import { SHORT_WIDE, useMedia } from './useMedia';
+import { ZoomPan } from './ZoomPan';
 
 const KIND_LABEL: Record<StepKind, string> = {
   start: 'Start',
@@ -44,8 +46,8 @@ function Explanation({ step }: { step: Step }) {
           ? 'border-violet-400/50 bg-violet-400/10'
           : 'border-navy-600 bg-navy-850';
   return (
-    <div aria-live="polite" className={`rounded-xl border px-4 py-3 ${tone}`}>
-      <div className="mb-1 flex items-center gap-2 text-[12px]">
+    <div aria-live="polite" className={`rounded-2xl border px-4 py-3 max-sm:px-3 max-sm:py-2 ${tone}`}>
+      <div className="mb-1 flex items-center gap-2 text-[12px] max-sm:mb-0.5">
         <span className="font-semibold text-navy-200">{KIND_LABEL[step.kind]}</span>
         {step.loc && <span className="rounded bg-navy-800 px-1.5 font-mono text-navy-300">line {step.loc.line}</span>}
         {step.outcome !== undefined && (
@@ -54,7 +56,7 @@ function Explanation({ step }: { step: Step }) {
           </span>
         )}
       </div>
-      <p className="text-[15px] leading-relaxed text-navy-100">{step.explanation}</p>
+      <p className="text-[15px] leading-relaxed text-navy-100 max-sm:text-[14px] max-sm:leading-snug">{step.explanation}</p>
     </div>
   );
 }
@@ -120,6 +122,9 @@ export function RunView() {
   const custom = useStore((s) => s.custom);
   const code = useStore((s) => currentWork(s).code);
   const startRun = useStore((s) => s.startRun);
+  const details = useStore((s) => s.showDetails);
+  const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
+  const sideBySide = useMedia(SHORT_WIDE);
   const display = useMemo(() => displayedRun({ run, problemId }), [run, problemId]);
   const result = display?.result ?? null;
   const problem = problemFor(problemId, custom);
@@ -179,6 +184,7 @@ export function RunView() {
     returned: tr?.returned,
     selectedNode,
     onSelectNode: (id) => selectNode(selectedNode === id ? null : id),
+    details,
   };
   const comparison = step.kind === 'done' && display ? compareRun(display.expect, result) : null;
   // A trace is never presented as belonging to code it did not come from.
@@ -186,7 +192,8 @@ export function RunView() {
   const running = run.status === 'running';
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    // On short screens the board keeps a usable height and the whole view scrolls, with playback pinned below.
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       {failed && <FailureBanner run={run} inspecting={display!.kind === 'failed-steps'} />}
       {display!.kind === 'previous' && (
         <p className="mx-4 mt-3 rounded-lg border border-navy-500 bg-navy-850 px-3 py-2 text-[13px] text-navy-200">
@@ -218,9 +225,9 @@ export function RunView() {
         </div>
       )}
       {running && !stale && <p className="mx-4 mt-3 text-[13px] text-navy-300">Running your code…</p>}
-      {!running && !stale && run.auto && display!.kind === 'current' && (
-        <p className="mx-4 mt-3 text-[12.5px] text-navy-300">
-          Ran automatically after your last edit and is showing the final state. Press Home or Play to watch it from the start.
+      {!running && !stale && run.auto && display!.kind === 'current' && index >= result.steps.length - 1 && (
+        <p className="mx-4 mt-3 text-[12.5px] text-navy-300 short:hidden">
+          Ran automatically after your last edit. Press Play to watch it from the start.
         </p>
       )}
       {result.notes.map((n) => (
@@ -229,35 +236,40 @@ export function RunView() {
         </p>
       ))}
       <BindingsPanel bindings={bindings!} />
-      <div className="board-grid min-h-0 flex-1 overflow-auto px-4 py-4">
-        <div className="flex flex-col gap-5">
-          {step.kind === 'done' && <ResultBanner step={step} comparison={comparison} />}
-          <Structures ctx={ctx} />
-          {selectedNode !== null && step.heap[selectedNode] && (
-            <NodeDetails
-              id={selectedNode}
-              step={step}
-              heap={step.heap}
-              shapeOf={bindings!.shapeOf}
-              visited={tr?.visited.has(selectedNode)}
-              returned={tr?.returned.get(selectedNode)}
-              onClose={() => selectNode(null)}
-            />
-          )}
-          <CallStack ctx={ctx} />
-        </div>
-      </div>
-      <div className="flex flex-col gap-3 border-t border-navy-700 bg-navy-900 px-4 py-3">
-        <Explanation step={step} />
-        <Playback total={result.steps.length} />
-        <details className="group">
-          <summary className="cursor-pointer select-none text-[13px] font-semibold text-navy-300 hover:text-navy-100">
-            Variables and output
-          </summary>
-          <div className="mt-2">
-            <Inspector step={step} output={result.output} />
+      {/* Short, wide screens (phones in landscape) put the step controls beside the drawing instead of under it. */}
+      <div className="flex min-h-0 flex-1 flex-col short-wide:flex-row">
+        <ZoomPan controlsSlot={sideBySide ? null : zoomSlot}>
+          <div className="flex flex-col gap-5">
+            {step.kind === 'done' && <ResultBanner step={step} comparison={comparison} />}
+            <Structures ctx={ctx} />
+            {selectedNode !== null && step.heap[selectedNode] && (
+              <NodeDetails
+                id={selectedNode}
+                step={step}
+                heap={step.heap}
+                shapeOf={bindings!.shapeOf}
+                visited={tr?.visited.has(selectedNode)}
+                returned={tr?.returned.get(selectedNode)}
+                onClose={() => selectNode(null)}
+              />
+            )}
+            <CallStack ctx={ctx} />
           </div>
-        </details>
+        </ZoomPan>
+        <div className="sticky bottom-0 z-10 flex flex-col gap-3 border-t border-navy-700 bg-navy-900 px-4 py-3 max-sm:gap-2 max-sm:py-2.5 short-wide:static short-wide:w-[19rem] short-wide:shrink-0 short-wide:gap-2 short-wide:overflow-y-auto short-wide:border-t-0 short-wide:border-l short-wide:py-2.5">
+          {/* The zoom controls sit just above the pinned bar, so they stay visible however the view is scrolled. */}
+          {!sideBySide && <div ref={setZoomSlot} className="absolute bottom-full right-3 mb-3" />}
+          <Explanation step={step} />
+          <Playback total={result.steps.length} />
+          <details className="group">
+            <summary className="cursor-pointer select-none text-[13px] font-semibold text-navy-300 hover:text-navy-100">
+              Variables and output
+            </summary>
+            <div className="mt-2">
+              <Inspector step={step} output={result.output} />
+            </div>
+          </details>
+        </div>
       </div>
     </div>
   );

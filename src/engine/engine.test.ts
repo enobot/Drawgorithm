@@ -97,6 +97,13 @@ describe('Two Sum', () => {
     expect(step.effects).toContainEqual(expect.objectContaining({ type: 'index-read', index: 0, value: { t: 'number', v: 2 } }));
   });
 
+  it('does not capitalize a variable name that starts a sentence', () => {
+    const run = runProblem('two-sum');
+    const ret = run.steps.find((s) => s.kind === 'return')!;
+    expect(ret.explanation).toContain('seen.get(2) → 0.');
+    expect(ret.explanation).not.toContain('Seen.get');
+  });
+
   it('draws a buggy version faithfully instead of hiding the mistake', () => {
     const buggy = p.starter.replace(
       '    const complement = target - nums[i];',

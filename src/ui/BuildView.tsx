@@ -5,6 +5,7 @@ import { NO_OVERRIDES, resolveBindings } from '../viz/bindings';
 import { EMPTY_FOCUS } from '../viz/focus';
 import { BindingsPanel } from './BindingsPanel';
 import { NodeDetails } from './NodeDetails';
+import { ZoomPan } from './ZoomPan';
 
 /**
  * Live Build: the structure the top-level code creates, redrawn as you type.
@@ -16,6 +17,7 @@ export function BuildView() {
   const selectedNode = useStore((s) => s.selectedNode);
   const selectNode = useStore((s) => s.selectNode);
   const startRun = useStore((s) => s.startRun);
+  const details = useStore((s) => s.showDetails);
   const current = live.result;
   const drawn = current?.step ? current : live.lastDrawn;
   const step = drawn?.step ?? null;
@@ -49,12 +51,14 @@ export function BuildView() {
         highlightedVars: new Set(lineInfo?.vars ?? []),
         selectedNode,
         onSelectNode: (id) => selectNode(selectedNode === id ? null : id),
+        details,
       }
     : null;
   const functions = (current ?? drawn)!.hints.functions;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    // On short screens the board keeps a usable height and the whole view scrolls.
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="flex flex-col gap-2 px-4 pt-3">
         {current?.pending && (
           <div role="status" className="rounded-lg border border-amber-400/60 bg-amber-400/10 px-3 py-2 text-[13px]">
@@ -95,7 +99,7 @@ export function BuildView() {
         )}
       </div>
       {bindings && <BindingsPanel bindings={bindings} />}
-      <div className="board-grid min-h-0 flex-1 overflow-auto px-4 py-4">
+      <ZoomPan>
         {ctx && hasDrawing ? (
           <div className="flex flex-col gap-5">
             <Structures ctx={ctx} />
@@ -114,7 +118,10 @@ export function BuildView() {
               (step!.frames.length > 1 ? (
                 <CallStack ctx={ctx} />
               ) : (
-                <section aria-label="Top-level variables" className="rounded-xl border border-navy-700 bg-navy-900/70 p-4">
+                <section
+                  aria-label="Top-level variables"
+                  className="rounded-3xl bg-navy-900/90 p-4 shadow-[inset_0_0_0_1px_rgb(125_145_181/0.18)] sm:p-5"
+                >
                   <FrameContent frame={program} ctx={ctx} active />
                 </section>
               ))}
@@ -141,9 +148,12 @@ export function BuildView() {
             ))}
           </div>
         )}
-      </div>
+      </ZoomPan>
       {lineInfo && (
-        <div className="border-t border-navy-700 bg-navy-900 px-4 py-2.5 text-[13.5px] text-navy-100" aria-live="polite">
+        <div
+          className="sticky bottom-0 z-10 border-t border-navy-700 bg-navy-900 px-4 py-2.5 text-[13.5px] text-navy-100"
+          aria-live="polite"
+        >
           <span className="mr-2 rounded bg-violet-400/20 px-1.5 font-mono text-[12px] text-violet-200">line {lineInfo.line}</span>
           {lineInfo.explanation}
         </div>

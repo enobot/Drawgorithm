@@ -5,6 +5,7 @@ import { DEFAULT_PROBLEM_ID, PROBLEMS, problemById, type ProblemDef } from '../p
 import { parseProblemText, parseValue, starterFor, type ParsedProblem } from '../problems/pasted';
 import type { ExpectSpec, InputKind, LiveResult, RunRequest, RunResult } from '../trace/types';
 import { EngineStopped, cancelObsoleteRun, runInWorker, stopRun } from '../worker/client';
+import { readDeepLink, type Pane } from './deepLink';
 import { mergeLive, type LiveState } from './live';
 import type { FormatResult } from '../editor/format';
 import { NO_OVERRIDES, type ArrayRole, type BindingOverrides, type NodeShape } from '../viz/bindings';
@@ -83,7 +84,7 @@ interface State {
   cursorLine: number | null;
   selectedNode: number | null;
   /** Narrow screens show one panel at a time. */
-  mobilePane: 'problem' | 'code' | 'visual';
+  mobilePane: Pane;
   reveal: { line: number; nonce: number } | null;
   /** Ctrl+S formats the code when on (the code itself is always saved automatically). */
   formatOnSave: boolean;
@@ -91,6 +92,10 @@ interface State {
   formatMessage: { text: string; tone: 'ok' | 'error' } | null;
   /** Run the code with the selected inputs after each typing pause. */
   autoRun: boolean;
+  /** Drawings also show secondary detail: indices, declaration kinds, null children. */
+  showDetails: boolean;
+  /** Zoom of the drawing board, shared by Build and Run (1 = actual size). */
+  boardZoom: number;
   /** The user's drawing choices per problem (see viz/bindings.ts). */
   bindings: Record<string, BindingOverrides>;
 }
@@ -114,6 +119,8 @@ interface Actions {
   /** Drops an in-flight run whose code is out of date. */
   cancelRun(): void;
   setAutoRun(on: boolean): void;
+  setShowDetails(on: boolean): void;
+  setBoardZoom(zoom: number): void;
   /** null removes the choice and returns to automatic detection. */
   bindShape(className: string, shape: NodeShape | null): void;
   bindArray(name: string, choice: { role?: ArrayRole; pointers?: string[] } | null): void;
@@ -135,6 +142,10 @@ interface Actions {
 
 export const CUSTOM_ID = 'custom';
 const STORAGE_KEY = 'drawgorithms:v1';
+
+export const MIN_ZOOM = 0.4;
+export const MAX_ZOOM = 2.5;
+export const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number.isFinite(z) ? z : 1));
 
 let latestRun = 0;
 
@@ -194,6 +205,7 @@ interface Saved {
   speed: number;
   formatOnSave: boolean;
   autoRun: boolean;
+  showDetails: boolean;
   bindings: Record<string, BindingOverrides>;
 }
 
@@ -207,8 +219,11 @@ function load(): Partial<Saved> {
 }
 
 const saved = load();
+// A demo link wins over the last session; the visitor's saved work for that example is kept.
+const link = typeof location === 'undefined' ? {} : readDeepLink(location.search, (id) => !!problemById(id));
 const initialProblemId =
-  saved.problemId && (saved.problemId === CUSTOM_ID || problemById(saved.problemId)) ? saved.problemId : DEFAULT_PROBLEM_ID;
+  link.problemId ??
+  (saved.problemId && (saved.problemId === CUSTOM_ID || problemById(saved.problemId)) ? saved.problemId : DEFAULT_PROBLEM_ID);
 const initialCustom: CustomProblem = saved.custom ?? { text: '', entry: '' };
 
 export const useStore = create<State & Actions>()((set, get) => ({
@@ -238,12 +253,15 @@ export const useStore = create<State & Actions>()((set, get) => ({
   live: { result: null, code: null, lastDrawn: null },
   cursorLine: null,
   selectedNode: null,
-  mobilePane: 'code',
+  // Phones open on the drawing: the first thing a new visitor sees is the code running.
+  mobilePane: link.pane ?? 'visual',
   reveal: null,
   formatOnSave: saved.formatOnSave ?? false,
   formatNonce: 0,
   formatMessage: null,
   autoRun: saved.autoRun ?? true,
+  showDetails: saved.showDetails ?? false,
+  boardZoom: 1,
   bindings: saved.bindings ?? {},
 
   selectProblem(id) {
@@ -415,6 +433,14 @@ export const useStore = create<State & Actions>()((set, get) => ({
     set({ autoRun: on });
   },
 
+  setShowDetails(on) {
+    set({ showDetails: on });
+  },
+
+  setBoardZoom(zoom) {
+    set({ boardZoom: clampZoom(zoom) });
+  },
+
   bindShape(className, shape) {
     const s = get();
     const cur = s.bindings[s.problemId] ?? NO_OVERRIDES;
@@ -522,6 +548,7 @@ useStore.subscribe((s) => {
       speed: s.speed,
       formatOnSave: s.formatOnSave,
       autoRun: s.autoRun,
+      showDetails: s.showDetails,
       bindings: s.bindings,
     };
     try {

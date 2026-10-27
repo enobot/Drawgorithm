@@ -26,6 +26,19 @@ No API key or backend is needed. Code and settings are saved in the browser (loc
 - **Editor**: Run (Ctrl+Enter), Reset, Format Code (Shift+Alt+F, Prettier), optional format on save (Ctrl+S). Unfinished or invalid code is never formatted.
 - **Build tab**: draws what top-level code builds (e.g. `const root = new TreeNode(5)`). Function bodies wait for Run. Put the cursor on a line to highlight what it built; click a node to see which lines created and connected it. While code is unfinished, invalid, unsupported or failing, the last valid drawing stays, labeled **Previous valid state**.
 - **Run tab**: play/pause, step back/forward (← →), Home/End, speed, draggable timeline. A run that finishes shows the actual result next to the expected output, even when the answer is wrong. A run that fails or hits a limit is not drawn as a result: you get the error and its line, the last successful run stays visible (labeled), and you can choose to step through what ran before it stopped.
+- **Drawing board**: every state has a color and a word (now, compared, changed, new, visited, answer, problem), so nothing depends on color alone. **Show details** adds indices, declaration kinds and null children. Zoom with the − / + / Fit buttons, Ctrl/⌘ + wheel or a trackpad pinch, or two fingers on a touch screen; pan by scrolling or dragging empty board. Plain scrolling is never captured. Motion follows the operating system's reduced-motion setting.
+
+## Screen sizes
+
+- **Wide (1200px and up)**: Problem, Code and Visual side by side, each resizable; Problem and Code can be hidden.
+- **Medium (768–1199px, tablets)**: the drawing beside a tabbed Problem/Code panel; **Widen drawing** hides the left panel.
+- **Narrow (phones, and phones in landscape)**: one panel at a time (Problem, Code, Visual), opening on Visual. In landscape the step controls sit beside the drawing.
+
+Switching tabs, rotating or resizing keeps the code, the editor's cursor and undo history, inputs, and playback position. Buttons grow to at least 44px on touch screens, text fields use 16px so iOS doesn't zoom the page, and with the on-screen keyboard open the app fits the visible area.
+
+**Demo links** open an example directly, e.g. `/?example=two-sum&view=visual` (ids: `tree-build`, `variables`, `two-sum`, `binary-search`, `level-order`, `reverse-list`; views: `problem`, `code`, `visual`). The parameters are removed from the address after loading, and a visitor's saved work for that example is kept.
+
+Tested so far in Chromium's device emulation (375×812 portrait, 812×375 landscape, 768×1024, 1366×768). Not yet tested on a real iPhone (Safari) or Android phone.
 
 ## Supported JavaScript (the first language adapter)
 
@@ -46,7 +59,7 @@ src/
   worker/          Runs the engine in Web Workers (one for Run, one for Live Build); time limit and Stop terminate the worker
   viz/             Renderers (blocks, arrays/strings with pointers, grids, maps, sets, objects, trees, linked lists, call stack)
                    and pure analysis (tree layout, cycles/shared/detached nodes, traversal state, index pointers)
-  ui/              Panels: problem, editor (Monaco), Build and Run views, playback, inspector
+  ui/              Panels: problem, editor (Monaco), Build and Run views, playback, inspector, zoomable board, layouts per screen size
   state/           App state (zustand), persistence, which drawing is shown
   editor/          Monaco setup and the Prettier formatter
   problems/        Built-in examples, pasted-problem parsing, expected-vs-actual comparison
@@ -58,4 +71,4 @@ Coverage, the capability matrix and the staged plan are in [docs/COVERAGE.md](do
 
 ## Tests
 
-`npm test` runs Vitest: trace generation, Two Sum duplicates, Binary Search boundaries, execution limits, unsupported syntax, Live Build (unfinished code, cycles, shared and detached nodes, null children), tree layout and traversal state, representative LeetCode-style patterns, and the formatter.
+`npm test` runs Vitest: trace generation, Two Sum duplicates, Binary Search boundaries, execution limits, unsupported syntax, Live Build (unfinished code, cycles, shared and detached nodes, null children), tree layout and traversal state, representative LeetCode-style patterns, the formatter, stale-run cancellation, demo links and zoom limits.

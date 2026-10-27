@@ -9,6 +9,7 @@ import type { ShapeOf } from './bindings';
 import type { Focus } from './focus';
 import { ListView } from './ListView';
 import { MapView, ObjectView, SetView } from './MapView';
+import { STATE } from './theme';
 import { TreeView } from './TreeView';
 import { NameTag, ValueText, VarBlock, type BlockState } from './Value';
 
@@ -32,7 +33,12 @@ export interface BoardContext {
   onSelectNode?: (id: number) => void;
   /** Build mode: every node the code created, including detached ones. */
   extraNodeIds?: number[];
+  /** Show indices, declarations, null children and other secondary detail. */
+  details?: boolean;
 }
+
+/** On a check (if, loop condition) the values the step read are being compared. */
+const isComparison = (step: Step) => step.kind === 'condition' || step.kind === 'loop-check';
 
 /** Node references are shown as pointer blocks; their structure is drawn once, above the frames. */
 const isPrimitive = (v: VarSnap, heap: Heap, shapeOf: ShapeOf) => v.value.t !== 'ref' || !!shapeOf(heap[v.value.id]);
@@ -85,6 +91,8 @@ function StructureFor({
           currentNode={ctx.current}
           cellReadsFor={active ? focus.cellReads : undefined}
           cellWritesFor={active ? focus.cellWrites : undefined}
+          comparing={active && isComparison(step)}
+          shapeOf={ctx.shapeOf}
         />
       );
     }
@@ -96,6 +104,7 @@ function StructureFor({
           lookups={active ? (focus.mapLookups.get(h.id) ?? []) : []}
           inserts={active ? (focus.mapInserts.get(h.id) ?? []) : []}
           columns={view?.mapColumns}
+          shapeOf={ctx.shapeOf}
         />
       );
     case 'set':
@@ -113,6 +122,7 @@ function StructureFor({
           obj={h}
           heap={heap}
           writes={new Set(active ? focus.propWrites.filter((w) => w.objId === h.id).map((w) => w.key) : [])}
+          shapeOf={ctx.shapeOf}
         />
       );
   }
@@ -173,6 +183,7 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
     else structures.push({ names: [v.name], h });
   }
   const anyCompute = active && [...focus.compute.keys()].some((n) => focus.declared.has(n));
+  const comparing = active && isComparison(step);
 
   if (!frame.vars.length) {
     return <p className="text-[13px] text-navy-400">No variables yet.</p>;
@@ -188,7 +199,7 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
               if (active) {
                 if (focus.declared.has(v.name)) state = 'new';
                 else if (focus.changed.has(v.name)) state = 'changed';
-                else if (focus.reads.has(v.name)) state = 'read';
+                else if (focus.reads.has(v.name)) state = comparing ? 'compare' : 'read';
               }
               if (ctx.highlightedVars?.has(v.name)) state = state === 'idle' ? 'read' : state;
               const id = refId(v.value);
@@ -204,6 +215,7 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
                   delay={anyCompute && state === 'new' ? 0.35 : 0}
                   onClick={id !== null && ctx.onSelectNode ? () => ctx.onSelectNode!(id) : undefined}
                   shapeOf={shapeOf}
+                  details={ctx.details}
                 />
               );
             })}
@@ -284,6 +296,7 @@ export function Structures({ ctx }: { ctx: BoardContext }) {
           highlightedEdges={ctx.highlightedEdges}
           selected={ctx.selectedNode}
           onSelect={ctx.onSelectNode}
+          details={ctx.details}
         />
       )}
       {list.chains.length > 0 && (
@@ -341,15 +354,26 @@ export function CallStack({ ctx }: { ctx: BoardContext }) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 12, transition: { duration: 0.15 } }}
               transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-              className={`rounded-xl border ${isActive ? 'border-teal-400/60 bg-navy-900/90 p-4' : 'border-navy-700 bg-navy-900/60 px-3 py-2'}`}
+              className={
+                isActive
+                  ? `rounded-3xl bg-navy-900/90 p-4 sm:p-5 ${showStack ? 'shadow-[0_0_0_1.5px_rgb(94_234_212/0.5),0_10px_30px_-18px_rgb(45_212_191/0.6)]' : 'shadow-[inset_0_0_0_1px_rgb(125_145_181/0.18)]'}`
+                  : 'rounded-2xl bg-navy-900/55 px-3.5 py-2 shadow-[inset_0_0_0_1px_rgb(125_145_181/0.16)]'
+              }
             >
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className={`font-mono text-[13px] font-semibold ${isActive ? 'text-teal-200' : 'text-navy-300'}`}>{f.label}</span>
+                {showStack && (
+                  <span
+                    aria-hidden
+                    className={`size-2 shrink-0 rounded-full ${isActive ? 'bg-teal-300 shadow-[0_0_8px_rgb(94_234_212/0.8)]' : 'bg-navy-500'}`}
+                  />
+                )}
+                <span className={`font-mono text-[13px] font-semibold ${isActive ? 'text-teal-100' : 'text-navy-300'}`}>{f.label}</span>
                 {!isActive && f.loc && <span className="text-[12px] text-navy-400">waiting at line {f.loc.line}</span>}
+                {isActive && showStack && !f.finished && <span className="text-[12px] text-teal-300">running now</span>}
                 {isActive && f.finished && <span className="text-[12px] text-navy-300">finished</span>}
                 {f.returning && (
-                  <span className="rounded-md border border-violet-400/60 bg-violet-400/15 px-2 py-0.5 text-[12px] font-semibold text-violet-200">
-                    returns <ValueText v={f.returning} heap={step.heap} className="font-mono" />
+                  <span className="rounded-full bg-violet-400/15 px-2.5 py-0.5 text-[12px] font-semibold text-violet-100 shadow-[inset_0_0_0_1px_rgb(196_181_253/0.55)]">
+                    returns <ValueText v={f.returning} heap={step.heap} />
                   </span>
                 )}
               </div>
@@ -369,28 +393,34 @@ export function CallStack({ ctx }: { ctx: BoardContext }) {
 }
 
 export function ResultBanner({ step, comparison }: { step: Step; comparison: Comparison | null }) {
+  const tone = comparison ? (comparison.match ? STATE.result : STATE.error) : STATE.idle;
   return (
-    <div
-      role="status"
-      className={`rounded-xl border px-4 py-3 ${
-        comparison
-          ? comparison.match
-            ? 'border-teal-400/60 bg-teal-400/10'
-            : 'border-rose-400/60 bg-rose-400/10'
-          : 'border-navy-600 bg-navy-850'
-      }`}
-    >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-[15px] font-semibold text-navy-100">
-          {comparison ? (comparison.match ? '✓ Correct' : '✗ Not the expected output') : 'Finished'}
+    <div role="status" className={`flex items-start gap-3 rounded-3xl px-4 py-3.5 ${tone.fill} ${tone.ring}`}>
+      {comparison && (
+        <span
+          aria-hidden
+          // Keyed so the check pops once each time a run lands on the right answer.
+          key={comparison.match ? 'match' : 'miss'}
+          className={`grid size-8 shrink-0 place-items-center rounded-full text-[16px] font-bold ${
+            comparison.match ? 'dg-success bg-emerald-300 text-navy-950' : 'bg-rose-400/25 text-rose-100'
+          }`}
+        >
+          {comparison.match ? '✓' : '✗'}
         </span>
-        {step.result && (
-          <span className="text-[14px] text-navy-200">
-            Returned <ValueText v={step.result} heap={step.heap} className="font-mono" />
+      )}
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-[15px] font-bold text-navy-50">
+            {comparison ? (comparison.match ? 'Correct' : 'Not the expected output') : 'Finished'}
           </span>
-        )}
+          {step.result && (
+            <span className="text-[14px] text-navy-200">
+              Returned <ValueText v={step.result} heap={step.heap} />
+            </span>
+          )}
+        </div>
+        {comparison && <p className="mt-1 text-[13px] text-navy-200">{comparison.message}</p>}
       </div>
-      {comparison && <p className="mt-1 text-[13px] text-navy-200">{comparison.message}</p>}
     </div>
   );
 }

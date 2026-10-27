@@ -3,27 +3,33 @@ import type { ComputeDetail, DeclKind, Heap, ValueSnap } from '../trace/types';
 import { conventionShape, formatSnap, nodeValueLabel, type ObjectSnap } from './analysis';
 import type { ShapeOf } from './bindings';
 import { varColor } from './colors';
+import { POP, STATE, type VisualState } from './theme';
 
-/** A primitive (or a short reference) colored by type. Node references read as "→ node 5" through the bindings. */
+/**
+ * A value, colored by type. Node references read as "→ node 5" through the bindings.
+ * `compact` keeps nested objects short (`Cell {…}`) instead of dumping their fields.
+ */
 export function ValueText({
   v,
   heap,
   className = '',
   shapeOf = conventionShape,
+  compact = false,
 }: {
   v: ValueSnap | undefined;
   heap: Heap;
   className?: string;
   shapeOf?: ShapeOf;
+  compact?: boolean;
 }) {
   if (!v) return <span className={`text-navy-400 italic ${className}`}>undefined</span>;
   switch (v.t) {
     case 'number':
-      return <span className={`text-navy-100 ${className}`}>{formatSnap(v, heap)}</span>;
+      return <span className={`text-navy-100 tabular-nums ${className}`}>{formatSnap(v, heap)}</span>;
     case 'string':
-      return <span className={`text-teal-200 ${className}`}>{JSON.stringify(v.v)}</span>;
+      return <span className={`text-teal-200 ${className}`}>“{v.v}”</span>;
     case 'boolean':
-      return <span className={`text-violet-300 ${className}`}>{String(v.v)}</span>;
+      return <span className={`text-violet-200 ${className}`}>{String(v.v)}</span>;
     case 'null':
     case 'undefined':
       return <span className={`text-navy-400 italic ${className}`}>{v.t}</span>;
@@ -35,12 +41,26 @@ export function ValueText({
       if (h && shape) {
         return <span className={`text-navy-100 ${className}`}>→ node {nodeValueLabel(h as ObjectSnap, heap, shape)}</span>;
       }
-      return <span className={`text-navy-200 ${className}`}>{formatSnap(v, heap)}</span>;
+      if (compact && h?.kind === 'object')
+        return (
+          <span className={`text-navy-300 ${className}`}>
+            {h.className ?? 'object'} {'{…}'}
+          </span>
+        );
+      return <span className={`text-navy-200 ${className}`}>{formatSnap(v, heap, compact ? 1 : 0)}</span>;
     }
   }
 }
 
-export type BlockState = 'idle' | 'read' | 'changed' | 'new';
+export type BlockState = 'idle' | 'read' | 'compare' | 'changed' | 'new';
+
+const BLOCK_STATE: Record<BlockState, { visual: VisualState; label: string | null }> = {
+  idle: { visual: 'idle', label: null },
+  read: { visual: 'current', label: 'read' },
+  compare: { visual: 'compare', label: 'compared' },
+  changed: { visual: 'changed', label: 'changed' },
+  new: { visual: 'new', label: 'new' },
+};
 
 const DECL_LABEL: Partial<Record<DeclKind, string>> = { const: 'const', let: 'let', var: 'var', param: 'input' };
 
@@ -55,73 +75,85 @@ interface VarBlockProps {
   delay?: number;
   onClick?: () => void;
   shapeOf?: ShapeOf;
+  /** Show the declaration kind (let/const/input). */
+  details?: boolean;
 }
 
-/** A labeled box holding one value: the core "variable as a block" picture. */
-export function VarBlock({ name, value, heap, state, declKind, compute, delay = 0, onClick, shapeOf = conventionShape }: VarBlockProps) {
+/** A labeled tile holding one value: the core "variable as a block" picture. */
+export function VarBlock({
+  name,
+  value,
+  heap,
+  state,
+  declKind,
+  compute,
+  delay = 0,
+  onClick,
+  shapeOf = conventionShape,
+  details = false,
+}: VarBlockProps) {
   const color = varColor(name);
-  const ring =
-    state === 'read'
-      ? 'border-teal-300 shadow-[0_0_0_3px_rgb(45_212_191/0.25)]'
-      : state === 'changed' || state === 'new'
-        ? 'border-amber-300 shadow-[0_0_0_3px_rgb(251_191_36/0.22)]'
-        : 'border-navy-600';
+  const s = BLOCK_STATE[state];
+  const style = STATE[s.visual];
   const isNodeRef = value.t === 'ref' && !!shapeOf(heap[value.id]);
   return (
     <motion.div
       layout="position"
-      initial={state === 'new' ? { opacity: 0, scale: 0.6, y: 6 } : false}
+      initial={state === 'new' ? { opacity: 0, scale: 0.6, y: 8 } : false}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ type: 'spring', stiffness: 380, damping: 26, delay: state === 'new' ? delay : 0 }}
-      className="flex flex-col items-start gap-1"
+      transition={{ ...POP, delay: state === 'new' ? delay : 0 }}
+      className="flex flex-col items-start gap-1.5"
     >
-      <div className="flex items-baseline gap-1.5 px-0.5">
-        <span className={`font-mono text-[13px] font-semibold ${color.text}`}>{name}</span>
-        {DECL_LABEL[declKind] && <span className="text-[11px] text-navy-400">{DECL_LABEL[declKind]}</span>}
+      <div className="flex items-center gap-1.5 px-0.5">
+        <span aria-hidden className={`size-2 rounded-full ${color.bg}`} />
+        <span className={`text-[14px] font-bold ${color.text}`}>{name}</span>
+        {details && DECL_LABEL[declKind] && <span className="text-[11px] text-navy-400">{DECL_LABEL[declKind]}</span>}
       </div>
       <motion.button
         type="button"
         onClick={onClick}
         disabled={!onClick}
         key={state === 'changed' ? JSON.stringify(value) : 'stable'}
-        initial={state === 'changed' ? { scale: 1.12 } : false}
+        initial={state === 'changed' ? { scale: 1.14 } : false}
         animate={{ scale: 1 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 22 }}
-        className={`min-w-14 h-14 px-3 rounded-xl border-2 bg-navy-850 flex items-center justify-center font-mono text-lg font-medium disabled:cursor-default ${ring} ${isNodeRef ? 'text-[15px]' : ''}`}
-        aria-label={`${name} = ${formatSnap(value, heap)}`}
+        transition={POP}
+        className={`flex h-14 min-w-14 items-center justify-center rounded-2xl px-4 text-[20px] font-bold transition-shadow disabled:cursor-default ${style.fill} ${style.ring} ${
+          isNodeRef ? 'text-[15px] font-semibold' : ''
+        }`}
+        aria-label={`${name} = ${formatSnap(value, heap)}${s.label ? `, ${s.label}` : ''}`}
       >
-        <ValueText v={value} heap={heap} shapeOf={shapeOf} />
+        <ValueText v={value} heap={heap} shapeOf={shapeOf} compact />
       </motion.button>
-      {state === 'read' && <span className="text-[11px] font-medium text-teal-300 px-0.5">read</span>}
+      {s.label && <span className={`px-0.5 text-[11.5px] font-semibold ${style.labelColor}`}>{s.label}</span>}
       {compute && (state === 'new' || state === 'changed') && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: Math.max(0, delay - 0.15) }}
-          className="rounded-md bg-navy-800 border border-navy-600 px-2 py-1 font-mono text-[12px] text-navy-200"
+          className="rounded-xl bg-navy-800/90 px-2.5 py-1.5 font-mono text-[12.5px] text-navy-200 shadow-[inset_0_0_0_1px_rgb(125_145_181/0.2)]"
         >
           <span className="text-navy-400">{compute.expression}</span>
           {compute.substituted !== compute.expression && (
             <>
               <span className="text-navy-500"> → </span>
-              <span className="text-teal-200">{compute.substituted}</span>
+              <span className="text-violet-200">{compute.substituted}</span>
             </>
           )}
           <span className="text-navy-500"> = </span>
-          <span className="text-amber-200 font-semibold">{compute.result}</span>
+          <span className="font-semibold text-amber-200">{compute.result}</span>
         </motion.div>
       )}
     </motion.div>
   );
 }
 
-/** A small name tag used on markers and node labels; always shows the name, not just color. */
+/** A small name pill used on pointers and node labels; always shows the name, not just color. */
 export function NameTag({ name, faint = false, className = '' }: { name: string; faint?: boolean; className?: string }) {
   const color = varColor(name);
   return (
     <span
-      className={`inline-flex items-center rounded-md px-1.5 py-px font-mono text-[11px] font-semibold leading-4 border ${
-        faint ? 'border-navy-600 text-navy-400 bg-navy-900' : `${color.border} ${color.text} ${color.soft}`
+      className={`inline-flex items-center rounded-full px-2 py-px text-[11.5px] font-bold leading-[18px] ${
+        faint ? 'bg-navy-800 text-navy-400' : `${color.soft} ${color.text} shadow-[inset_0_0_0_1px_currentColor]`
       } ${className}`}
     >
       {name}

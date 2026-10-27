@@ -1,5 +1,10 @@
 @import 'tailwindcss';
 
+/* Short screens (phones in landscape), and short screens wide enough for side-by-side panels.
+   Keep `short-wide` in step with SHORT_WIDE in src/ui/useMedia.ts. */
+@custom-variant short (@media (max-height: 519.98px));
+@custom-variant short-wide (@media (max-height: 519.98px) and (min-width: 600px));
+
 @theme {
   --font-sans: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
@@ -27,6 +32,15 @@
   body {
     @apply bg-navy-950 text-navy-100 font-sans antialiased;
     font-feature-settings: 'tnum' 1;
+    /* Panels scroll inside themselves; the page never scrolls sideways. */
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+  /* The app fills the visible screen; with an on-screen keyboard on iOS, the height above it (set from script). */
+  .app-shell {
+    height: 100%;
+    height: 100dvh;
+    height: var(--app-height, 100dvh);
   }
   :focus-visible {
     outline: 2px solid var(--color-teal-300);
@@ -45,7 +59,7 @@
   @apply bg-navy-900 border border-navy-700/70 rounded-xl shadow-[0_1px_0_0_rgb(255_255_255/0.03)_inset,0_12px_32px_-16px_rgb(0_0_0/0.6)];
 }
 @utility btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 h-8 text-sm font-semibold transition-colors disabled:opacity-40;
+  @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 h-8 text-sm font-semibold transition-colors disabled:opacity-40 pointer-coarse:h-11 pointer-coarse:px-4;
 }
 @utility btn-primary {
   @apply btn bg-teal-400 text-navy-950 hover:bg-teal-300;
@@ -57,7 +71,10 @@
   @apply btn border border-navy-600 text-navy-100 hover:border-navy-400 hover:bg-navy-800;
 }
 @utility icon-btn {
-  @apply inline-flex items-center justify-center size-8 rounded-lg text-navy-200 hover:bg-navy-800 hover:text-navy-100 transition-colors disabled:opacity-30;
+  @apply inline-flex items-center justify-center size-8 rounded-lg text-navy-200 hover:bg-navy-800 hover:text-navy-100 transition-colors disabled:opacity-30 pointer-coarse:size-11;
+}
+@utility zoom-btn {
+  @apply inline-flex items-center justify-center size-8 rounded-full text-[17px] font-semibold text-navy-200 hover:bg-navy-700 hover:text-navy-100 transition-colors disabled:opacity-30 pointer-coarse:size-11;
 }
 @utility field {
   @apply w-full rounded-lg bg-navy-950 border border-navy-700 px-2.5 py-1.5 font-mono text-[13px] text-navy-100 placeholder:text-navy-500 hover:border-navy-500 focus:border-teal-400 focus:outline-none;
@@ -115,6 +132,48 @@
 [data-separator]:focus-visible::after,
 [data-separator][data-separator-state='drag']::after {
   @apply w-0.5 bg-teal-400;
+}
+
+/* Motion tied to real events only. A node that just became current lights up once;
+   a matching result gets one restrained glow. */
+@keyframes dg-light {
+  0% {
+    box-shadow:
+      0 0 0 2px #5eead4,
+      0 0 0 0 rgb(45 212 191 / 0.7);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px #5eead4,
+      0 0 0 14px rgb(45 212 191 / 0);
+  }
+}
+@keyframes dg-success {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.dg-light {
+  animation: dg-light 0.7s ease-out 1;
+}
+.dg-success {
+  animation: dg-success 0.6s ease-out 1;
+}
+
+/* iOS zooms the whole page into any text field under 16px, so on touch screens fields
+   (and Monaco's hidden input) use 16px. Unlayered, so it wins over the utilities. */
+@media (pointer: coarse) {
+  input:not([type='checkbox'], [type='radio'], [type='range']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

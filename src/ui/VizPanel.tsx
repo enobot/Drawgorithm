@@ -14,12 +14,14 @@ export function VizPanel() {
   const pending = useStore((s) => s.live.result?.status === 'pending');
   const autoRun = useStore((s) => s.autoRun);
   const setAutoRun = useStore((s) => s.setAutoRun);
+  const details = useStore((s) => s.showDetails);
+  const setDetails = useStore((s) => s.setShowDetails);
   const active = TABS.find((t) => t.id === tab)!;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="@container flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-navy-700 px-3 py-2">
-        <div role="tablist" aria-label="Visualization mode" className="flex rounded-lg bg-navy-950 p-0.5">
+        <div role="tablist" aria-label="Visualization mode" className="flex rounded-full bg-navy-950 p-0.5">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -28,7 +30,7 @@ export function VizPanel() {
               aria-selected={tab === t.id}
               aria-controls={`panel-${t.id}`}
               onClick={() => setTab(t.id)}
-              className={`relative rounded-md px-3.5 py-1 text-[13px] font-semibold transition-colors ${
+              className={`relative rounded-full px-4 py-1 text-[13px] font-semibold transition-colors pointer-coarse:py-2.5 ${
                 tab === t.id ? 'bg-navy-700 text-navy-100' : 'text-navy-300 hover:text-navy-100'
               }`}
             >
@@ -42,14 +44,33 @@ export function VizPanel() {
             </button>
           ))}
         </div>
-        <p className="text-[12.5px] text-navy-300">{active.hint}</p>
-        <label
-          className="ml-auto flex items-center gap-1.5 text-[12.5px] text-navy-300"
-          title="After you pause typing, check the code and run it with the selected inputs. Runs of older code are cancelled."
-        >
-          <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} className="accent-teal-400" />
-          Run as I type
-        </label>
+        <p className="hidden text-[12.5px] text-navy-300 @min-[34rem]:block">{active.hint}</p>
+        <div className="ml-auto flex items-center gap-4">
+          <label
+            className="flex items-center gap-1.5 text-[12.5px] text-navy-300 pointer-coarse:min-h-11"
+            title="Also show indices, declaration kinds and null children."
+          >
+            <input
+              type="checkbox"
+              checked={details}
+              onChange={(e) => setDetails(e.target.checked)}
+              className="accent-teal-400 pointer-coarse:size-5"
+            />
+            Show details
+          </label>
+          <label
+            className="flex items-center gap-1.5 text-[12.5px] text-navy-300 pointer-coarse:min-h-11"
+            title="After you pause typing, check the code and run it with the selected inputs. Runs of older code are cancelled."
+          >
+            <input
+              type="checkbox"
+              checked={autoRun}
+              onChange={(e) => setAutoRun(e.target.checked)}
+              className="accent-teal-400 pointer-coarse:size-5"
+            />
+            Run as I type
+          </label>
+        </div>
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="min-h-0 flex-1">
         {tab === 'build' ? <BuildView /> : <RunView />}
