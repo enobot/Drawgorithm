@@ -1,0 +1,8 @@
+# Dependencies, build output and generated files
+node_modules/
+dist/
+coverage/
+package-lock.json
+*.log
+# Execution traces, if any are ever saved to disk
+*.trace.json
