@@ -3,7 +3,7 @@ import type { Heap, HeapSnap, ValueSnap } from '../trace/types';
 import { conventionShape, nodeValueLabel, windowOf, type Marker, type ObjectSnap } from './analysis';
 import type { ShapeOf } from './bindings';
 import { varColor } from './colors';
-import { GLIDE, POP, STATE, type VisualState } from './theme';
+import { GLIDE, POP, STATE, useGlide, type VisualState } from './theme';
 import { NameTag, ValueText } from './Value';
 
 const CELL = 52;
@@ -62,6 +62,7 @@ const CELL_LABEL: Partial<Record<VisualState, string>> = { changed: 'changed', r
 /** Softly rounded tiles with subtle index labels, gliding pointer markers and an optional left..right window. */
 export function Cells(props: CellsProps) {
   const { items, total, heap, markers, role, isString, shapeOf = conventionShape } = props;
+  const glide = useGlide();
   if (role === 'stack' && markers.length === 0) return <StackView {...props} />;
   if (role === 'queue' && markers.length === 0) return <QueueView {...props} />;
   const lead = markers.some((m) => m.index === -1) ? 1 : 0;
@@ -85,7 +86,7 @@ export function Cells(props: CellsProps) {
             left: (lead + Math.max(win.from, 0)) * STEP - 4,
             width: (Math.min(win.to, items.length - 1) - Math.max(win.from, 0) + 1) * STEP,
           }}
-          transition={GLIDE}
+          transition={glide}
         />
       )}
       <div className="relative flex" style={{ gap: GAP }}>
@@ -141,7 +142,7 @@ export function Cells(props: CellsProps) {
             style={{ top: CELL + 22 + labelRow + (row === 0 ? 0 : 10 + row * MARKER_ROW), width: CELL }}
             initial={false}
             animate={{ left: (lead + index) * STEP }}
-            transition={GLIDE}
+            transition={glide}
           >
             {row === 0 && <span aria-hidden className="mb-0.5 h-2.5 w-0.5 rounded-full" style={{ background: varColor(m.name).hex }} />}
             <NameTag name={m.name} className="max-w-[60px] truncate whitespace-nowrap" />
@@ -184,38 +185,37 @@ function StackView({ items, heap, reads, writes, result, currentNode, comparing,
   );
 }
 
-/** A queue as a lane: items join at the back (right) and leave from the front (left). */
+/** A queue as an open lane: items join at the back (right) and leave from the front (left). */
 function QueueView({ items, heap, reads, writes, result, currentNode, comparing, shapeOf = conventionShape }: CellsProps) {
   return (
-    <div className="inline-flex items-center gap-2">
-      <span className="flex flex-col items-center text-[11px] font-semibold text-navy-300">
-        <span aria-hidden>←</span>front
-      </span>
-      <div className="flex min-h-[64px] min-w-[120px] items-center gap-2 rounded-full bg-navy-850 px-3 py-2 shadow-[inset_0_0_0_1.5px_rgb(125_145_181/0.25)]">
-        <AnimatePresence initial={false} mode="popLayout">
-          {items.map((v, i) => {
-            const state = cellState(i, { reads, writes, result, currentNode, comparing }, v);
-            const style = STATE[state];
-            return (
-              <motion.div
-                key={v.t === 'ref' ? `r${v.id}` : `${i}:${JSON.stringify(v)}`}
-                layout
-                initial={{ opacity: 0, x: 36 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -36, transition: { duration: 0.2 } }}
-                transition={GLIDE}
-                className={`flex h-12 min-w-12 items-center justify-center rounded-2xl px-2 ${style.fill} ${style.ring}`}
-              >
+    <div
+      className="inline-flex min-h-[60px] min-w-24 items-center gap-2 rounded-2xl px-2.5 py-1.5 shadow-[inset_0_1.5px_0_0_rgb(125_145_181/0.28),inset_0_-1.5px_0_0_rgb(125_145_181/0.28)]"
+      title="Queue: items join at the back (right) and leave from the front (left)"
+    >
+      <AnimatePresence initial={false} mode="popLayout">
+        {items.map((v, i) => {
+          const state = cellState(i, { reads, writes, result, currentNode, comparing }, v);
+          const style = STATE[state];
+          const end = items.length === 1 ? 'front · back' : i === 0 ? 'front' : i === items.length - 1 ? 'back' : null;
+          return (
+            <motion.div
+              key={v.t === 'ref' ? `r${v.id}` : `${i}:${JSON.stringify(v)}`}
+              layout="position"
+              initial={{ opacity: 0, x: 36 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -36, transition: { duration: 0.2 } }}
+              transition={GLIDE}
+              className="flex flex-col items-center gap-0.5"
+            >
+              <div className={`flex h-11 min-w-11 items-center justify-center rounded-2xl px-2 ${style.fill} ${style.ring}`}>
                 <CellValue v={v} heap={heap} shapeOf={shapeOf} />
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-        {items.length === 0 && <span className="px-1 text-[12px] text-navy-500">empty</span>}
-      </div>
-      <span className="flex flex-col items-center text-[11px] font-semibold text-navy-300">
-        <span aria-hidden>←</span>back
-      </span>
+              </div>
+              <span className="h-3.5 whitespace-nowrap text-[10.5px] font-semibold leading-3.5 text-navy-400">{end}</span>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+      {items.length === 0 && <span className="px-1 text-[12px] text-navy-500">empty</span>}
     </div>
   );
 }
@@ -246,7 +246,8 @@ interface ArrayViewProps {
   shapeOf?: ShapeOf;
 }
 
-function isGrid(arr: ArraySnap, heap: Heap): boolean {
+/** Arrays of flat arrays (DP tables, grids), drawn as a table. */
+export function isGrid(arr: ArraySnap, heap: Heap): boolean {
   return (
     arr.items.length > 0 &&
     arr.items.every((v) => v.t === 'ref' && heap[v.id]?.kind === 'array' && (heap[v.id] as ArraySnap).items.every((x) => x.t !== 'ref'))
@@ -311,6 +312,8 @@ function GridView({ arr, heap, markers, cellReadsFor, cellWritesFor, comparing }
           </span>
           {Array.from({ length: cols }, (_, c) => {
             const v = row?.items[c];
+            // Shorter rows (e.g. tree levels) end where their data ends: no empty boxes after them.
+            if (!row || c >= row.items.length) return <span key={c} aria-hidden />;
             const read = row ? cellReadsFor?.get(row.id)?.has(c) : false;
             const write = row ? cellWritesFor?.get(row.id)?.has(c) : false;
             const state: VisualState = write ? 'changed' : read ? (comparing ? 'compare' : 'current') : 'idle';

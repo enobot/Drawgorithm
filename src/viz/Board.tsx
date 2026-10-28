@@ -3,13 +3,28 @@ import { useMemo } from 'react';
 import type { ProblemDef } from '../problems/catalog';
 import type { Comparison } from '../problems/compare';
 import type { FrameSnap, Heap, HeapSnap, StaticHints, Step, VarSnap } from '../trace/types';
-import { buildListDiagram, buildTreeDiagram, conventionShape, formatSnap, markersFor, nodeLabels, refId, variableRefs } from './analysis';
-import { ArrayView, Cells, type ArrayRole } from './ArrayView';
+import {
+  buildListDiagram,
+  buildTreeDiagram,
+  conventionShape,
+  formatSnap,
+  markersFor,
+  nodeLabels,
+  refId,
+  variableRefs,
+  windowOf,
+} from './analysis';
+import { ArrayView, Cells, isGrid, type ArrayRole } from './ArrayView';
+import { lastRead, trackArrayItems } from './illustrated/identity';
+import { ListScene } from './illustrated/ListScene';
+import { QueueScene } from './illustrated/QueueScene';
+import { ShelfScene } from './illustrated/ShelfScene';
 import type { ShapeOf } from './bindings';
 import type { Focus } from './focus';
+import type { ListSlot } from './listLayout';
 import { ListView } from './ListView';
 import { MapView, ObjectView, SetView } from './MapView';
-import { STATE } from './theme';
+import { GLIDE, STATE } from './theme';
 import { TreeView } from './TreeView';
 import { NameTag, ValueText, VarBlock, type BlockState } from './Value';
 
@@ -35,6 +50,14 @@ export interface BoardContext {
   extraNodeIds?: number[];
   /** Show indices, declarations, null children and other secondary detail. */
   details?: boolean;
+  /** Places for linked-list nodes kept for the whole run (see listLayout.ts). */
+  listSlots?: Map<number, ListSlot>;
+  /** Draw queues, linked lists and index-searched arrays as illustrated scenes (same trace, different picture). */
+  illustrated?: boolean;
+  /** Every step of the run, for scenes that need history (who joined a line when, the last slot read). */
+  steps?: Step[];
+  /** Scroll the editor to a line (e.g. where the selected person joined the line). */
+  onRevealLine?: (line: number) => void;
 }
 
 /** On a check (if, loop condition) the values the step read are being compared. */
@@ -61,13 +84,14 @@ function queuedNodes(frame: FrameSnap, heap: Heap, hints: StaticHints, shapeOf: 
 }
 
 function StructureFor({
-  name,
+  names,
   h,
   frame,
   ctx,
   active,
 }: {
-  name: string;
+  /** Every variable in this frame that refers to the structure; the first names it. */
+  names: string[];
   h: HeapSnap;
   frame: FrameSnap;
   ctx: BoardContext;
@@ -75,18 +99,66 @@ function StructureFor({
 }) {
   const { step, hints, focus, view } = ctx;
   const heap = step.heap;
+  const name = names[0];
   switch (h.kind) {
     case 'array': {
       const markers = markersFor(frame, name, h.items.length, hints);
       const result = ctx.resultCells?.arrayName === name ? ctx.resultCells.indices : undefined;
+      const role = roleOf(name, hints);
+      const reads = active ? (focus.cellReads.get(h.id) ?? new Set<number>()) : new Set<number>();
+      const writes = active ? (focus.cellWrites.get(h.id) ?? new Set<number>()) : new Set<number>();
+      // Illustrated scenes, where a real-life picture fits the operation. Everything else stays technical.
+      if (ctx.illustrated && role === 'queue') {
+        return (
+          <QueueScene
+            arr={h}
+            heap={heap}
+            names={names}
+            track={ctx.steps ? (trackArrayItems(ctx.steps, h.id)[step.index] ?? null) : null}
+            steps={ctx.steps}
+            effects={active ? step.effects : []}
+            reads={reads}
+            writes={writes}
+            overlay={!!ctx.details}
+            shapeOf={ctx.shapeOf ?? conventionShape}
+            onSelectNode={ctx.onSelectNode}
+            onRevealLine={ctx.onRevealLine}
+          />
+        );
+      }
+      if (ctx.illustrated && role === 'array' && markers.some((m) => m.axis === 0) && !isGrid(h, heap)) {
+        const compare = active && isComparison(step) ? [...step.effects].reverse().find((e) => e.type === 'compare') : undefined;
+        const seen = ctx.steps
+          ? lastRead(ctx.steps, h.id, step.index)
+          : reads.size
+            ? { step: step.index, index: Math.max(...reads) }
+            : null;
+        return (
+          <ShelfScene
+            arr={h}
+            heap={heap}
+            name={name}
+            markers={markers.filter((m) => m.axis === 0)}
+            window={windowOf(markers)}
+            reads={reads}
+            writes={writes}
+            result={result}
+            comparing={active && isComparison(step)}
+            compare={compare?.type === 'compare' ? { text: compare.text, result: compare.result } : null}
+            lastRead={seen ? { index: seen.index, now: active && seen.step === step.index } : null}
+            overlay={!!ctx.details}
+            shapeOf={ctx.shapeOf ?? conventionShape}
+          />
+        );
+      }
       return (
         <ArrayView
           arr={h}
           heap={heap}
           markers={markers}
-          reads={active ? (focus.cellReads.get(h.id) ?? new Set()) : new Set()}
-          writes={active ? (focus.cellWrites.get(h.id) ?? new Set()) : new Set()}
-          role={roleOf(name, hints)}
+          reads={reads}
+          writes={writes}
+          role={role}
           result={result}
           currentNode={ctx.current}
           cellReadsFor={active ? focus.cellReads : undefined}
@@ -227,7 +299,8 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
         return (
           <div key={v.name} className="flex flex-col gap-2">
             <NameTag name={v.name} className="self-start" />
-            <div className="overflow-x-auto pb-1">
+            {/* No scroll box of its own: a long string widens the card and the board scrolls, so nothing is clipped. */}
+            <div className="pt-2">
               <Cells
                 items={[...s].map((ch) => ({ t: 'string' as const, v: ch }))}
                 total={s.length}
@@ -243,7 +316,8 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
         );
       })}
       {structures.map(({ names, h }) => (
-        <div key={h.id} className="flex flex-col gap-2">
+        // Glides when something above it grows or shrinks, instead of jumping.
+        <motion.div key={h.id} layout="position" transition={GLIDE} className="flex flex-col gap-2">
           <div className="flex items-center gap-1.5">
             {names.map((n) => (
               <NameTag key={n} name={n} />
@@ -251,11 +325,11 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
             {names.length > 1 && <span className="text-[11px] text-navy-400">same {h.kind === 'array' ? 'array' : 'object'}</span>}
             {active && ctx.focus.changedObjects.has(h.id) && <span className="text-[11px] font-semibold text-amber-300">changed</span>}
           </div>
-          <div className={`overflow-x-auto ${h.kind === 'array' ? 'pt-5 pb-1' : ''}`}>
-            <StructureFor name={names[0]} h={h} frame={frame} ctx={ctx} active={active} />
+          <div className={h.kind === 'array' ? 'pt-2' : ''}>
+            <StructureFor names={names} h={h} frame={frame} ctx={ctx} active={active} />
           </div>
           {active && h.kind === 'array' && <ReadWriteCaption name={names[0]} h={h} focus={ctx.focus} heap={heap} />}
-        </div>
+        </motion.div>
       ))}
     </div>
   );
@@ -266,6 +340,16 @@ function frameSummary(frame: FrameSnap, heap: Heap): string {
     .slice(0, 5)
     .map((v) => `${v.name} = ${formatSnap(v.value, heap)}`)
     .join(', ');
+}
+
+/** Says which structures have illustrated scenes, so the technical ones aren't a surprise. */
+export function IllustratedNote() {
+  return (
+    <p className="max-w-2xl text-[12.5px] text-navy-400">
+      Illustrated so far: queues (a line at a counter), linked lists (people holding ropes) and arrays read through index variables
+      (numbered shelves). Trees, maps, sets, stacks and grids are still drawn the technical way.
+    </p>
+  );
 }
 
 /** Trees and linked lists, drawn once for the whole call stack. */
@@ -299,19 +383,35 @@ export function Structures({ ctx }: { ctx: BoardContext }) {
           details={ctx.details}
         />
       )}
-      {list.chains.length > 0 && (
-        <ListView
-          diagram={list}
-          heap={step.heap}
-          labels={labels}
-          current={ctx.current}
-          written={focus.propWrites}
-          created={focus.created}
-          highlighted={ctx.highlightedIds}
-          selected={ctx.selectedNode}
-          onSelect={ctx.onSelectNode}
-        />
-      )}
+      {list.chains.length > 0 &&
+        (ctx.illustrated ? (
+          <ListScene
+            diagram={list}
+            heap={step.heap}
+            labels={labels}
+            current={ctx.current}
+            written={focus.propWrites}
+            created={focus.created}
+            highlighted={ctx.highlightedIds}
+            selected={ctx.selectedNode}
+            onSelect={ctx.onSelectNode}
+            slots={ctx.listSlots}
+            overlay={!!ctx.details}
+          />
+        ) : (
+          <ListView
+            diagram={list}
+            heap={step.heap}
+            labels={labels}
+            current={ctx.current}
+            written={focus.propWrites}
+            created={focus.created}
+            highlighted={ctx.highlightedIds}
+            selected={ctx.selectedNode}
+            onSelect={ctx.onSelectNode}
+            slots={ctx.listSlots}
+          />
+        ))}
     </section>
   );
 }
@@ -330,13 +430,14 @@ export function CallStack({ ctx }: { ctx: BoardContext }) {
   const frames = hidden ? [...all.slice(0, STACK_HEAD), ...all.slice(-STACK_TAIL)] : all;
   const calls = step.frames.length - 1;
   return (
-    <section aria-label="Call stack" className="flex flex-col gap-2">
+    <section aria-label="Call stack" className="relative flex flex-col gap-2">
       {showStack && (
         <h3 className="section-title">
           Call stack: {calls} active {calls === 1 ? 'call' : 'calls'}
         </h3>
       )}
-      <AnimatePresence initial={false}>
+      {/* popLayout: a finished call leaves the flow at once and fades where it was, so cards never stack on top of each other. */}
+      <AnimatePresence initial={false} mode="popLayout">
         {frames.flatMap((f, i) => {
           const isActive = f.id === active.id;
           const gap =
@@ -350,13 +451,14 @@ export function CallStack({ ctx }: { ctx: BoardContext }) {
             <motion.div
               key={f.id}
               layout="position"
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 12, transition: { duration: 0.15 } }}
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              transition={GLIDE}
+              // The open card grows with wide content (a long array) instead of clipping it; the board scrolls.
               className={
                 isActive
-                  ? `rounded-3xl bg-navy-900/90 p-4 sm:p-5 ${showStack ? 'shadow-[0_0_0_1.5px_rgb(94_234_212/0.5),0_10px_30px_-18px_rgb(45_212_191/0.6)]' : 'shadow-[inset_0_0_0_1px_rgb(125_145_181/0.18)]'}`
+                  ? `w-fit min-w-full rounded-3xl bg-navy-900/90 p-4 sm:p-5 ${showStack ? 'shadow-[0_0_0_1.5px_rgb(94_234_212/0.5),0_10px_30px_-18px_rgb(45_212_191/0.6)]' : 'shadow-[inset_0_0_0_1px_rgb(125_145_181/0.18)]'}`
                   : 'rounded-2xl bg-navy-900/55 px-3.5 py-2 shadow-[inset_0_0_0_1px_rgb(125_145_181/0.16)]'
               }
             >
@@ -372,7 +474,10 @@ export function CallStack({ ctx }: { ctx: BoardContext }) {
                 {isActive && showStack && !f.finished && <span className="text-[12px] text-teal-300">running now</span>}
                 {isActive && f.finished && <span className="text-[12px] text-navy-300">finished</span>}
                 {f.returning && (
-                  <span className="rounded-full bg-violet-400/15 px-2.5 py-0.5 text-[12px] font-semibold text-violet-100 shadow-[inset_0_0_0_1px_rgb(196_181_253/0.55)]">
+                  <span
+                    title={`returns ${formatSnap(f.returning, step.heap)}`}
+                    className="max-w-[min(100%,22rem)] truncate rounded-full bg-violet-400/15 px-2.5 py-0.5 text-[12px] font-semibold text-violet-100 shadow-[inset_0_0_0_1px_rgb(196_181_253/0.55)]"
+                  >
                     returns <ValueText v={f.returning} heap={step.heap} />
                   </span>
                 )}
@@ -409,17 +514,11 @@ export function ResultBanner({ step, comparison }: { step: Step; comparison: Com
         </span>
       )}
       <div className="min-w-0">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-[15px] font-bold text-navy-50">
-            {comparison ? (comparison.match ? 'Correct' : 'Not the expected output') : 'Finished'}
-          </span>
-          {step.result && (
-            <span className="text-[14px] text-navy-200">
-              Returned <ValueText v={step.result} heap={step.heap} />
-            </span>
-          )}
-        </div>
-        {comparison && <p className="mt-1 text-[13px] text-navy-200">{comparison.message}</p>}
+        <p className="text-[15px] font-bold text-navy-50">
+          {comparison ? (comparison.match ? 'Correct' : 'Not the expected output') : 'Finished'}
+        </p>
+        <p className="mt-0.5 text-[14px] leading-snug text-navy-100">{step.explanation}</p>
+        {comparison && <p className="mt-1 text-[13px] text-navy-300">{comparison.message}</p>}
       </div>
     </div>
   );

@@ -29,6 +29,7 @@ export interface CustomProblem {
 }
 
 export type VizTab = 'build' | 'run';
+export type ViewStyle = 'illustrated' | 'technical';
 
 export interface RunState {
   status: 'idle' | 'running' | 'done' | 'stopped' | 'failed';
@@ -94,6 +95,8 @@ interface State {
   autoRun: boolean;
   /** Drawings also show secondary detail: indices, declaration kinds, null children. */
   showDetails: boolean;
+  /** Illustrated scenes (people, shelves, ropes) or the technical drawing; both show the same trace. */
+  viewStyle: ViewStyle;
   /** Zoom of the drawing board, shared by Build and Run (1 = actual size). */
   boardZoom: number;
   /** The user's drawing choices per problem (see viz/bindings.ts). */
@@ -120,6 +123,7 @@ interface Actions {
   cancelRun(): void;
   setAutoRun(on: boolean): void;
   setShowDetails(on: boolean): void;
+  setViewStyle(style: ViewStyle): void;
   setBoardZoom(zoom: number): void;
   /** null removes the choice and returns to automatic detection. */
   bindShape(className: string, shape: NodeShape | null): void;
@@ -206,6 +210,7 @@ interface Saved {
   formatOnSave: boolean;
   autoRun: boolean;
   showDetails: boolean;
+  viewStyle: ViewStyle;
   bindings: Record<string, BindingOverrides>;
 }
 
@@ -261,6 +266,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   formatMessage: null,
   autoRun: saved.autoRun ?? true,
   showDetails: saved.showDetails ?? false,
+  viewStyle: saved.viewStyle === 'technical' ? 'technical' : 'illustrated',
   boardZoom: 1,
   bindings: saved.bindings ?? {},
 
@@ -437,6 +443,10 @@ export const useStore = create<State & Actions>()((set, get) => ({
     set({ showDetails: on });
   },
 
+  setViewStyle(style) {
+    set({ viewStyle: style });
+  },
+
   setBoardZoom(zoom) {
     set({ boardZoom: clampZoom(zoom) });
   },
@@ -549,6 +559,7 @@ useStore.subscribe((s) => {
       formatOnSave: s.formatOnSave,
       autoRun: s.autoRun,
       showDetails: s.showDetails,
+      viewStyle: s.viewStyle,
       bindings: s.bindings,
     };
     try {

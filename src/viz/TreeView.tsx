@@ -1,13 +1,35 @@
 import { AnimatePresence, motion } from 'motion/react';
+import { useId } from 'react';
 import type { Heap } from '../trace/types';
 import { nodeValueLabel, type ObjectSnap, type StructureIssue, type TreeComponent, type TreeDiagram } from './analysis';
-import { GLIDE, STATE } from './theme';
+import { STATE, useGlide } from './theme';
+import { tidyTreeLayout } from './treeLayout';
 import { useWidth } from './useWidth';
 import { NameTag } from './Value';
 
 const NODE = 46;
-const LEVEL = 86;
-const TOP = 38; // room for variable labels above the root
+const R = NODE / 2;
+const LEVEL = 110;
+/** Variable labels sit in one of two rows above a node; the second is used only when the first is taken. */
+const TAG_ROW = 24;
+/** Space kept between labels on the same level. */
+const TAG_GAP = 8;
+/** Room above the root for variable labels. */
+const TOP = 40;
+/** Room below the deepest level for "returned" badges and null stubs. */
+const BOTTOM = 64;
+/** Side padding, so glows, labels and badges at the edges are never cut off. */
+const PAD_X = 36;
+/** Extra side room when a cycle edge bows outward (the bow plus its label). */
+const CYCLE_PAD = 190;
+/** Fixed slots for small trees: positions don't move while the tree grows (up to depth 3). */
+const SLOT_UNIT = 72;
+/** Smallest distance between neighbors on one level; closer than this, the compact layout is used. */
+const MIN_GAP = 70;
+/** Unit of the compact layout: node plus room for a badge between neighbors. */
+const TIDY_UNIT = 84;
+/** "returned …" badges show at most this many characters; the full value is in the tooltip. */
+const BADGE_CHARS = 14;
 
 export interface NodeLabel {
   name: string;
@@ -39,89 +61,205 @@ interface Placed {
   y: number;
 }
 
-function place(comp: TreeComponent, width: number): { nodes: Map<number, Placed>; compact: boolean } {
-  const usable = Math.max(width - NODE, NODE);
-  const bySlot = new Map(comp.nodes.map((n) => [n.id, { id: n.id, x: NODE / 2 + n.slotX * usable, y: TOP + n.depth * LEVEL }]));
-  // Fixed slots keep nodes still while the tree grows; fall back to a compact layout when they get too tight.
+interface TreePlacement {
+  nodes: Map<number, Placed>;
+  /** Where a null child's stub ends. */
+  nullAt: (parent: Placed, side: 'left' | 'right', slotX: number) => { x: number; y: number };
+  width: number;
+  height: number;
+}
+
+/**
+ * Pixel positions for one tree, with padding around everything that is drawn.
+ * Small trees use fixed slots (stable while they grow); when slots would put neighbors
+ * closer than MIN_GAP, a compact tidy layout is used instead, and the drawing grows
+ * wider than the board rather than overlapping. `available` is the board's width.
+ */
+function placeTree(comp: TreeComponent, available: number): TreePlacement {
+  const hasCycle = comp.edges.some((e) => e.kind === 'cycle');
+  const pad = PAD_X + (hasCycle ? CYCLE_PAD : 0);
+  const yOf = (depth: number) => TOP + depth * LEVEL + R;
+  const height = TOP + comp.depth * LEVEL + NODE + BOTTOM;
+
+  const slotWidth = Math.min(Math.max(available - 2 * pad - NODE, 0), 2 ** Math.max(comp.depth, 3) * SLOT_UNIT);
   const levels = new Map<number, number[]>();
-  for (const n of comp.nodes) levels.set(n.depth, [...(levels.get(n.depth) ?? []), bySlot.get(n.id)!.x]);
-  let tight = false;
-  for (const xs of levels.values()) {
+  for (const n of comp.nodes) levels.set(n.depth, [...(levels.get(n.depth) ?? []), n.slotX * slotWidth]);
+  const tight = [...levels.values()].some((xs) => {
     xs.sort((a, b) => a - b);
-    for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] < NODE + 12) tight = true;
+    return xs.some((x, i) => i > 0 && x - xs[i - 1] < MIN_GAP);
+  });
+
+  let rel: Map<number, number>;
+  let span: number;
+  // Slots only while every child still leans clearly to its side (at least 30px): past depth 3,
+  // or on a narrow board, a left child would look like a right one, so the tidy layout is used.
+  const slots = !tight && comp.depth <= 3 && slotWidth >= 2 ** (comp.depth + 1) * 30;
+  if (slots) {
+    rel = new Map(comp.nodes.map((n) => [n.id, n.slotX * slotWidth]));
+    span = slotWidth;
+  } else {
+    const spots = tidyTreeLayout(comp);
+    const xs = [...spots.values()].map((s) => s.x);
+    const min = Math.min(...xs);
+    rel = new Map([...spots].map(([id, s]) => [id, (s.x - min) * TIDY_UNIT]));
+    span = (Math.max(...xs) - min) * TIDY_UNIT;
   }
-  if (!tight) return { nodes: bySlot, compact: false };
-  return {
-    nodes: new Map(comp.nodes.map((n) => [n.id, { id: n.id, x: NODE / 2 + n.orderX * usable, y: TOP + n.depth * LEVEL }])),
-    compact: true,
+  const contentWidth = span + NODE + 2 * pad;
+  const width = Math.max(available, contentWidth);
+  const left = (width - contentWidth) / 2 + pad + R;
+  const nodes = new Map(comp.nodes.map((n) => [n.id, { id: n.id, x: left + (rel.get(n.id) ?? 0), y: yOf(n.depth) }]));
+  // A null child is written where that child would be, one level down, clear of the parent's badge.
+  const nullAt = (parent: Placed, side: 'left' | 'right', slotX: number) =>
+    slots
+      ? { x: left + slotX * slotWidth, y: parent.y + LEVEL - 12 }
+      : { x: parent.x + (side === 'left' ? -0.5 : 0.5) * TIDY_UNIT, y: parent.y + LEVEL - 12 };
+  return { nodes, nullAt, width, height };
+}
+
+/** A branch that leaves the parent's circle toward the child and arrives at the child's top. */
+function branch(a: Placed, b: Placed): string {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const sx = a.x + (dx / len) * R;
+  const sy = a.y + (dy / len) * R;
+  const ey = b.y - R;
+  const bend = (ey - sy) * 0.5;
+  return `M ${sx} ${sy} C ${sx} ${sy + bend} ${b.x} ${ey - bend} ${b.x} ${ey}`;
+}
+
+/** How far a back edge bows out past the nodes it joins. */
+const CYCLE_BOW = 90;
+
+/**
+ * A back edge (cycle) bows out to the side of its target, clear of the tree's branches, and
+ * stops just outside the target's circle so the whole arrowhead shows, pointing at its center.
+ */
+function cycleGeometry(a: Placed, b: Placed) {
+  const side = b.x - a.x < 0 || b.x === a.x ? -1 : 1;
+  const ox = side < 0 ? Math.min(a.x, b.x) - CYCLE_BOW : Math.max(a.x, b.x) + CYCLE_BOW;
+  const c1 = { x: ox, y: a.y };
+  const c2 = { x: ox, y: b.y };
+  const toward = (p: Placed, c: { x: number; y: number }, r: number) => {
+    const len = Math.hypot(c.x - p.x, c.y - p.y) || 1;
+    return { x: p.x + ((c.x - p.x) / len) * r, y: p.y + ((c.y - p.y) / len) * r };
   };
-}
-
-/** Whether a "returned …" badge fits to the right of a node centered at x (about 7px per 12px bold character). */
-function badgeFits(x: number, ret: string, width: number): boolean {
-  return x + NODE / 2 + 8 + 16 + `returned ${ret}`.length * 7 <= width;
-}
-
-/** A flowing branch from the bottom of the parent to the top of the child. */
-function branch(x1: number, y1: number, x2: number, y2: number): string {
-  const dy = y2 - y1;
-  return `M ${x1} ${y1} C ${x1} ${y1 + dy * 0.55} ${x2} ${y2 - dy * 0.55} ${x2} ${y2}`;
+  const s = toward(a, c1, R);
+  const e = toward(b, c2, R + 7);
+  // The curve's outermost point, where its label goes (outside the curve, never on it).
+  const mid = { x: 0.125 * s.x + 0.375 * c1.x + 0.375 * c2.x + 0.125 * e.x, y: 0.125 * s.y + 0.375 * c1.y + 0.375 * c2.y + 0.125 * e.y };
+  return { d: `M ${s.x} ${s.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${e.x} ${e.y}`, side, mid };
 }
 
 function edgePath(a: Placed, b: Placed, kind: string): string {
-  if (kind === 'cycle') {
-    // Curve outward so a back edge never hides behind the tree's branches.
-    const dx = b.x - a.x;
-    const side = dx <= 0 ? -1 : 1;
-    const cx = Math.min(a.x, b.x) + dx / 2 + side * 80 + (dx === 0 ? -60 : 0);
-    const cy = (a.y + b.y) / 2;
-    return `M ${a.x} ${a.y + NODE / 2} Q ${cx} ${cy} ${b.x + side * (NODE / 2)} ${b.y}`;
-  }
-  return branch(a.x, a.y + NODE / 2, b.x, b.y - NODE / 2);
+  return kind === 'cycle' ? cycleGeometry(a, b).d : branch(a, b);
 }
 
-function TreeComponentView({ comp, width, props }: { comp: TreeComponent; width: number; props: TreeViewProps }) {
+interface TagSpot {
+  side: 'left' | 'right' | 'center';
+  /** 0: just above the node; 1: one row higher, with a stem down to the node. */
+  row: 0 | 1;
+}
+
+/** Estimated width of a node's labels (11.5px bold names in pills, 4px apart). */
+const tagsWidth = (tags: NodeLabel[]) => tags.reduce((w, t) => w + 16 + t.name.length * 7, 0) + (tags.length - 1) * 4;
+
+/**
+ * Where each node's variable labels go. A label sits on the side away from the branch that
+ * arrives from the parent (the root's is centered); going left to right along each level,
+ * a label that would touch the previous one moves up a row instead of overlapping.
+ */
+function placeTags(comp: TreeComponent, nodes: Map<number, Placed>, labels: Map<number, NodeLabel[]>): Map<number, TagSpot> {
+  const sideOf = new Map(comp.edges.filter((e) => e.kind === 'child').map((e) => [e.to, e.side]));
+  const spots = new Map<number, TagSpot>();
+  const byDepth = new Map<number, Placed[]>();
+  for (const n of comp.nodes) {
+    if (!(labels.get(n.id) ?? []).length) continue;
+    byDepth.set(n.depth, [...(byDepth.get(n.depth) ?? []), nodes.get(n.id)!]);
+  }
+  for (const level of byDepth.values()) {
+    level.sort((a, b) => a.x - b.x);
+    const rightEdge = [-Infinity, -Infinity];
+    for (const p of level) {
+      const w = tagsWidth(labels.get(p.id)!);
+      const side = sideOf.get(p.id) ?? 'center';
+      const from = side === 'left' ? p.x - 8 - w : side === 'right' ? p.x + 8 : p.x - w / 2;
+      const row: 0 | 1 = from >= rightEdge[0] + TAG_GAP ? 0 : from >= rightEdge[1] + TAG_GAP ? 1 : rightEdge[0] <= rightEdge[1] ? 0 : 1;
+      rightEdge[row] = from + w;
+      spots.set(p.id, { side, row });
+    }
+  }
+  return spots;
+}
+
+function short(text: string): string {
+  return text.length > BADGE_CHARS ? `${text.slice(0, BADGE_CHARS - 1)}…` : text;
+}
+
+function TreeComponentView({ comp, available, props }: { comp: TreeComponent; available: number; props: TreeViewProps }) {
   const { heap, labels, current, visited, returned, queued, written, created, highlighted, highlightedEdges, selected, onSelect, details } =
     props;
-  const { nodes, compact } = place(comp, width);
-  const height = TOP + comp.depth * LEVEL + NODE + 40;
+  const markerId = useId().replace(/:/g, '');
+  const glide = useGlide();
+  const { nodes, nullAt, width, height } = placeTree(comp, available);
   const isWritten = (from: number, side: string) => written.some((w) => w.objId === from && w.key === side);
   const isHighlightedEdge = (from: number, side: string) => !!highlightedEdges?.some((w) => w.objId === from && w.key === side);
-  const nulls = compact ? [] : comp.nulls.filter((n) => details || n.parent === current);
+  const nulls = comp.nulls.filter((n) => details || n.parent === current);
+  const tagSpots = placeTags(comp, nodes, labels);
 
   return (
     <div className="relative" style={{ width, height }}>
       <svg className="absolute inset-0 overflow-visible" width={width} height={height} aria-hidden>
         <defs>
-          <marker id="dg-arrow-cycle" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker
+            id={`${markerId}-cycle`}
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
             <path d="M0 0 10 5 0 10z" fill="#fb7185" />
           </marker>
-          <marker id="dg-arrow-shared" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker
+            id={`${markerId}-shared`}
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="7"
+            markerHeight="7"
+            orient="auto-start-reverse"
+          >
             <path d="M0 0 10 5 0 10z" fill="#fbbf24" />
           </marker>
         </defs>
-        {nulls.map((n) => {
-          const parent = nodes.get(n.parent);
-          if (!parent) return null;
-          const x = NODE / 2 + n.slotX * Math.max(width - NODE, NODE);
-          const y = TOP + n.depth * LEVEL;
-          return (
-            <g key={`null-${n.parent}-${n.side}`} opacity={0.6}>
-              <path
-                d={branch(parent.x, parent.y + NODE / 2, x, y - 14)}
-                fill="none"
-                stroke="#3f5b8a"
-                strokeDasharray="2 5"
-                strokeWidth={2}
-                strokeLinecap="round"
-              />
-              <text x={x} y={y} textAnchor="middle" className="fill-navy-400" fontSize={12}>
-                null
-              </text>
-            </g>
-          );
-        })}
         <AnimatePresence initial={false}>
+          {nulls.map((n) => {
+            const parent = nodes.get(n.parent);
+            if (!parent) return null;
+            const end = nullAt(parent, n.side, n.slotX);
+            return (
+              <motion.g
+                key={`null-${n.parent}-${n.side}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.7 }}
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+              >
+                <path
+                  d={branch(parent, { id: -1, x: end.x, y: end.y - 14 + R })}
+                  fill="none"
+                  stroke="#3f5b8a"
+                  strokeDasharray="2 5"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                />
+                <text x={end.x} y={end.y + 4} textAnchor="middle" className="fill-navy-400" fontSize={12}>
+                  null
+                </text>
+              </motion.g>
+            );
+          })}
           {comp.edges.map((e) => {
             const a = nodes.get(e.from);
             const b = nodes.get(e.to);
@@ -132,18 +270,18 @@ function TreeComponentView({ comp, width, props }: { comp: TreeComponent; width:
               e.kind === 'cycle' ? '#fb7185' : e.kind === 'shared' ? '#fbbf24' : hot ? '#fcd34d' : linked ? '#c4b5fd' : '#5f7398';
             return (
               // Keyed by both ends: a re-pointed child fades its old branch out and draws the new one in.
+              // Dashed cycle and second-parent edges fade in: drawing them in would replace their dash pattern.
               <motion.path
                 key={`${e.from}-${e.side}-${e.to}`}
-                initial={{ pathLength: 0, opacity: 0 }}
-                animate={{ d: edgePath(a, b, e.kind), pathLength: 1, opacity: 1 }}
-                exit={{ opacity: 0, pathLength: 0, transition: { duration: 0.25 } }}
-                transition={GLIDE}
+                initial={e.kind === 'child' ? { pathLength: 0, opacity: 0 } : { opacity: 0 }}
+                animate={{ d: edgePath(a, b, e.kind), ...(e.kind === 'child' ? { pathLength: 1 } : {}), opacity: 1, stroke }}
+                exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                transition={glide}
                 fill="none"
-                stroke={stroke}
                 strokeWidth={hot || linked ? 3.5 : 2.5}
                 strokeLinecap="round"
                 strokeDasharray={e.kind === 'child' ? undefined : '7 6'}
-                markerEnd={e.kind === 'cycle' ? 'url(#dg-arrow-cycle)' : e.kind === 'shared' ? 'url(#dg-arrow-shared)' : undefined}
+                markerEnd={e.kind === 'cycle' ? `url(#${markerId}-cycle)` : e.kind === 'shared' ? `url(#${markerId}-shared)` : undefined}
               />
             );
           })}
@@ -154,15 +292,21 @@ function TreeComponentView({ comp, width, props }: { comp: TreeComponent; width:
             const a = nodes.get(e.from);
             const b = nodes.get(e.to);
             if (!a || !b) return null;
+            const cycle = e.kind === 'cycle' ? cycleGeometry(a, b) : null;
             return (
+              // Outside the curve, on a halo of board color, so no line runs through the words.
               <text
                 key={`t-${e.from}-${e.side}`}
-                x={(a.x + b.x) / 2 + (e.kind === 'cycle' ? (b.x <= a.x ? -50 : 50) : 8)}
-                y={(a.y + b.y) / 2 + 4}
+                x={cycle ? cycle.mid.x + cycle.side * 10 : (a.x + b.x) / 2 + 8}
+                y={cycle ? cycle.mid.y + 4 : (a.y + b.y) / 2 + 4}
                 className={e.kind === 'cycle' ? 'fill-rose-300' : 'fill-amber-300'}
                 fontSize={12}
                 fontWeight={700}
-                textAnchor="middle"
+                textAnchor={cycle ? (cycle.side < 0 ? 'end' : 'start') : 'start'}
+                stroke="#0b1322"
+                strokeWidth={5}
+                strokeLinejoin="round"
+                paintOrder="stroke"
               >
                 {e.kind === 'cycle' ? `${e.side} → cycle` : `${e.side}: 2nd parent`}
               </text>
@@ -197,16 +341,13 @@ function TreeComponentView({ comp, width, props }: { comp: TreeComponent; width:
               key={n.id}
               className="absolute"
               style={{ left: 0, top: 0 }}
-              initial={{ x: p.x - NODE / 2, y: p.y - NODE / 2, opacity: 0, scale: 0.4 }}
-              animate={{ x: p.x - NODE / 2, y: p.y - NODE / 2, opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.4 }}
-              transition={GLIDE}
+              initial={{ x: p.x - R, y: p.y - R, opacity: 0, scale: 0.4 }}
+              animate={{ x: p.x - R, y: p.y - R, opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.4, transition: { duration: 0.2 } }}
+              transition={glide}
             >
-              <div className="absolute bottom-full left-1/2 mb-1.5 flex -translate-x-1/2 gap-1 whitespace-nowrap">
-                {tags.map((t) => (
-                  <NameTag key={`${t.frame}-${t.name}`} name={t.name} faint={!t.active} />
-                ))}
-              </div>
+              {/* Labels sit on the side away from the branch arriving from the parent (see placeTags), so no line crosses them. */}
+              {tags.length > 0 && <TagGroup tags={tags} spot={tagSpots.get(n.id) ?? { side: 'center', row: 0 }} />}
               <button
                 type="button"
                 // A node that just became current lights up once (the key restarts the animation).
@@ -215,7 +356,7 @@ function TreeComponentView({ comp, width, props }: { comp: TreeComponent; width:
                 aria-label={describe}
                 aria-pressed={isSelected}
                 title={describe}
-                className={`relative flex items-center justify-center rounded-full text-[16px] font-bold transition-[background-color,box-shadow] duration-300 ${
+                className={`relative flex items-center justify-center rounded-full text-[16px] font-bold transition-[background-color,box-shadow,color] duration-300 ${
                   isCurrent ? 'dg-light bg-teal-300 text-navy-950' : `${style.fill} text-navy-100`
                 } ${isCurrent ? '' : isHot ? STATE.compare.ring : style.ring} ${
                   isSelected ? 'outline-2 outline-offset-4 outline-white' : ''
@@ -241,22 +382,42 @@ function TreeComponentView({ comp, width, props }: { comp: TreeComponent; width:
                 )}
               </button>
               {ret !== undefined && (
+                // Under the node, where it can't run into a neighbor on the same level.
                 <motion.span
-                  initial={{ opacity: 0, x: badgeFits(p.x, ret, width) ? -6 : 6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={GLIDE}
-                  // Beside the node, on the left when the right side would run past the drawing's edge.
-                  className={`absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-violet-400/20 px-2 text-[12px] font-bold text-violet-100 shadow-[inset_0_0_0_1px_rgb(167_139_250/0.6)] ${
-                    badgeFits(p.x, ret, width) ? 'left-full ml-2' : 'right-full mr-2'
-                  }`}
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={glide}
+                  title={`returned ${ret}`}
+                  className="absolute left-1/2 top-full mt-2.5 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#2a2752] px-2 py-px text-[11.5px] font-bold text-violet-100 shadow-[inset_0_0_0_1px_rgb(167_139_250/0.6)]"
                 >
-                  returned {ret}
+                  returned {short(ret)}
                 </motion.span>
               )}
             </motion.div>
           );
         })}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/** A node's variable labels; a label moved up a row keeps a short stem down to its node. */
+function TagGroup({ tags, spot }: { tags: NodeLabel[]; spot: TagSpot }) {
+  const lift = spot.row * TAG_ROW;
+  const align =
+    spot.side === 'left'
+      ? 'right-1/2 mr-2 items-end'
+      : spot.side === 'right'
+        ? 'left-1/2 ml-2 items-start'
+        : 'left-1/2 -translate-x-1/2 items-center';
+  return (
+    <div className={`absolute bottom-full flex flex-col ${align}`} style={{ marginBottom: 6 }}>
+      <div className="flex gap-1 whitespace-nowrap">
+        {tags.map((t) => (
+          <NameTag key={`${t.frame}-${t.name}`} name={t.name} faint={!t.active} solid />
+        ))}
+      </div>
+      {lift > 0 && <span aria-hidden className="mx-2 w-0.5 rounded-full bg-navy-400/70" style={{ height: lift }} />}
     </div>
   );
 }
@@ -270,7 +431,7 @@ export function IssueList({ issues }: { issues: StructureIssue[] }) {
   };
   const title: Record<StructureIssue['kind'], string> = { cycle: 'Cycle', shared: 'Shared node', detached: 'Detached' };
   return (
-    <ul className="mt-3 flex flex-col gap-2">
+    <ul className="mt-3 flex max-w-2xl flex-col gap-2">
       {issues.map((i, k) => (
         <li key={k} className={`rounded-xl bg-navy-850 px-3.5 py-2 text-[13.5px] leading-snug ${style[i.kind]}`}>
           <span className="font-bold">{title[i.kind]}: </span>
@@ -281,16 +442,15 @@ export function IssueList({ issues }: { issues: StructureIssue[] }) {
   );
 }
 
+/** Every tree in the heap, the one the code is working on first. Wide trees grow past the board and scroll. */
 export function TreeView(props: TreeViewProps) {
   const [ref, width] = useWidth<HTMLDivElement>();
-  const [main, ...rest] = props.diagram.components;
   return (
     <div ref={ref} className="w-full">
-      {width > 0 && main && <TreeComponentView comp={main} width={width} props={props} />}
-      {width > 0 && rest.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-4">
-          {rest.map((c) => (
-            <TreeComponentView key={c.rootId} comp={c} width={Math.min(width, Math.max(130, 2 ** c.depth * (NODE + 18)))} props={props} />
+      {width > 0 && (
+        <div className="flex flex-col gap-2">
+          {props.diagram.components.map((c) => (
+            <TreeComponentView key={c.rootId} comp={c} available={width} props={props} />
           ))}
         </div>
       )}

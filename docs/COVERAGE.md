@@ -69,6 +69,20 @@ The JavaScript adapter does not run your code on the browser's JavaScript engine
 | Hard memory quota                                                                       | No: browsers don't offer one for workers; the caps above bound memory indirectly |
 | Failed runs never shown as results                                                      | Yes: error with line; previous successful run stays, labeled                     |
 
+## Illustrated scenes
+
+| Structure                                       | Illustrated scene                                                   | Status                           |
+| ----------------------------------------------- | ------------------------------------------------------------------- | -------------------------------- |
+| Queue (array used with `shift()`)               | People in line at a counter; join at the back, served at the front  | Implemented, verified in browser |
+| Linked list                                     | People holding one-way ropes (`next`); ropes swing when re-pointed  | Implemented, verified in browser |
+| Array read through index variables              | Numbered shelf slots, index flags, shopper, comparison bubble, tape | Implemented, verified in browser |
+| Trees, maps, sets, stacks, grids, strings       | Technical drawing in both styles                                    | Not illustrated yet              |
+| Graphs, heaps, recursion, sorting, DP notebooks | (no renderer yet)                                                   | Planned                          |
+
+## Practice collection (Foundations 75)
+
+Available (authored and verified by `src/practice/foundations.test.ts`): 1 Shelf Lookup, 2 Repeated Visitor, 3 Stockroom Counts, 4 Balanced Shipment, 6 Mirror Message, 17 Turn the Chain, 21 Nested Symbols, 26 Find the Reading, 34 Level by Level, 36 Staircase Routes. The other 65 are planned (brief and intended drawing only). Exercises that need graphs, heaps, tries, deques or union-find stay planned until those renderers exist; the test refuses to mark an exercise available if any drawing it needs is unsupported.
+
 ## Staged plan
 
 1. **Stage 1 (this release)**: JavaScript adapter and trace contract; blocks, arrays with pointers and windows, maps, sets, objects, trees, linked lists, call stack; Live Build with previous-valid-state handling; playback; limits; formatting.
@@ -79,6 +93,6 @@ The JavaScript adapter does not run your code on the browser's JavaScript engine
 
 ## Product and licensing notes
 
-- Runtime dependencies are MIT licensed (React, Monaco, motion, react-resizable-panels, zustand, acorn, Prettier); fonts (Manrope, IBM Plex Mono) are SIL OFL 1.1. Re-check before adding runtimes such as Pyodide (MPL-2.0) or compilers.
+- Runtime dependencies are MIT licensed (React, Monaco, motion, react-resizable-panels, zustand, acorn, Prettier); fonts (Manrope, IBM Plex Mono, Patrick Hand) are SIL OFL 1.1. Re-check before adding runtimes such as Pyodide (MPL-2.0) or compilers.
 - Built-in problem descriptions are original. No problem statements, solutions or tests are scraped or bundled. Drawgorithms is not affiliated with LeetCode.
 - Not built yet: accounts, saved sessions on a server, usage quotas, subscriptions, AI explanations. Execution today is free because it runs in the user's browser. Server-side languages and AI would add per-run costs that need metering before any "unlimited" plan. User code should stay out of logs and AI requests unless the user opts in.

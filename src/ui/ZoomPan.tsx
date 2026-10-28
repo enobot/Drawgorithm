@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { MAX_ZOOM, MIN_ZOOM, clampZoom, useStore } from '../state/store';
 import { useMedia } from './useMedia';
@@ -24,6 +24,17 @@ export function ZoomPan({ children, controlsSlot }: { children: ReactNode; contr
   // Where to keep the drawing still while the zoom changes (a point in the scroller's view).
   const anchor = useRef<{ x: number; y: number; from: number } | null>(null);
 
+  // The drawing's full bounds, including parts wider than the board (a wide tree or a long
+  // array). Measured after every render too: a child can grow sideways without resizing the box.
+  const measureContent = useCallback(() => {
+    const inner = content.current;
+    if (!inner) return;
+    const width = Math.max(inner.offsetWidth, inner.scrollWidth);
+    const height = Math.max(inner.offsetHeight, inner.scrollHeight);
+    setBox((b) => (b.width === width && b.height === height ? b : { width, height }));
+  }, []);
+  useLayoutEffect(measureContent);
+
   // The content lays out at the board's width (wider when zoomed out, so more fits),
   // and the wrapper reserves the scaled size so scrolling covers the whole drawing.
   const [baseWidth, setBaseWidth] = useState(0);
@@ -34,14 +45,14 @@ export function ZoomPan({ children, controlsSlot }: { children: ReactNode; contr
     const measure = () => {
       const style = getComputedStyle(el);
       setBaseWidth(el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight));
-      setBox({ width: inner.offsetWidth, height: inner.offsetHeight });
+      measureContent();
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     ro.observe(inner);
     return () => ro.disconnect();
-  }, []);
+  }, [measureContent]);
 
   const zoomTo = (next: number, at?: { x: number; y: number }) => {
     const el = scroller.current;
@@ -152,18 +163,21 @@ export function ZoomPan({ children, controlsSlot }: { children: ReactNode; contr
 
   // Laid-out width: the board's width at 100% and above; wider when zoomed out so the drawing has room.
   const layoutWidth = baseWidth > 0 ? baseWidth / Math.min(zoom, 1) : undefined;
+  /** Zoom to `z` and show the drawing from its top-left corner (Fit and Reset view). */
+  const showFromStart = (z: number) => {
+    anchor.current = null;
+    setZoom(z);
+    requestAnimationFrame(() => scroller.current?.scrollTo({ left: 0, top: 0 }));
+  };
   const fit = () => {
     const el = scroller.current;
     const inner = content.current;
     if (!el || !inner || !baseWidth) return;
-    // The widest drawing (trees and lists scroll sideways inside the board) and the full height must fit.
-    let widest = inner.scrollWidth;
-    inner.querySelectorAll<HTMLElement>('.overflow-x-auto').forEach((x) => {
-      widest = Math.max(widest, x.scrollWidth + (x.getBoundingClientRect().left - inner.getBoundingClientRect().left) / zoom);
-    });
+    // The whole drawing, including anything wider than the board, must fit in both directions.
     const style = getComputedStyle(el);
     const height = el.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-    zoomTo(Math.min(1, baseWidth / widest, height / inner.offsetHeight));
+    const width = Math.max(inner.scrollWidth, inner.offsetWidth);
+    showFromStart(clampZoom(Math.min(1, baseWidth / width, height / Math.max(inner.scrollHeight, inner.offsetHeight))));
   };
 
   const showAll = !coarse || expanded;
@@ -190,9 +204,9 @@ export function ZoomPan({ children, controlsSlot }: { children: ReactNode; contr
       <button
         type="button"
         className="zoom-btn w-auto min-w-12 px-1.5 text-[12px] tabular-nums"
-        onClick={() => zoomTo(1)}
-        title="Back to actual size"
-        aria-label={`Zoom ${Math.round(zoom * 100)} percent. Reset to 100 percent`}
+        onClick={() => showFromStart(1)}
+        title="Reset view: actual size, back to the top"
+        aria-label={`Zoom ${Math.round(zoom * 100)} percent. Reset view`}
       >
         {Math.round(zoom * 100)}%
       </button>

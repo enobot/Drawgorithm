@@ -166,6 +166,10 @@ export function EditorPanel() {
               </option>
             ))}
             <option value={CUSTOM_ID}>Your pasted problem</option>
+            {/* A practice exercise opened from the Practice list shows here while it is open. */}
+            {!PROBLEMS.some((p) => p.id === problemId) && problemId !== CUSTOM_ID && (
+              <option value={problemId}>{problemFor(problemId, custom).title}</option>
+            )}
           </select>
         </label>
       </div>

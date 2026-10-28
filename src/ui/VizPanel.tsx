@@ -16,6 +16,8 @@ export function VizPanel() {
   const setAutoRun = useStore((s) => s.setAutoRun);
   const details = useStore((s) => s.showDetails);
   const setDetails = useStore((s) => s.setShowDetails);
+  const viewStyle = useStore((s) => s.viewStyle);
+  const setViewStyle = useStore((s) => s.setViewStyle);
   const active = TABS.find((t) => t.id === tab)!;
 
   return (
@@ -44,11 +46,36 @@ export function VizPanel() {
             </button>
           ))}
         </div>
-        <p className="hidden text-[12.5px] text-navy-300 @min-[34rem]:block">{active.hint}</p>
+        {/* Picture style: both show the same run at the same step; only the drawing changes. */}
+        <div role="group" aria-label="Picture style" className="flex rounded-full bg-navy-950 p-0.5">
+          {(['illustrated', 'technical'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              aria-pressed={viewStyle === s}
+              onClick={() => setViewStyle(s)}
+              title={
+                s === 'illustrated'
+                  ? 'Scenes with people, shelves and ropes, drawn from the same run.'
+                  : 'Cells, nodes and arrows, with every value spelled out.'
+              }
+              className={`rounded-full px-3.5 py-1 text-[13px] font-semibold transition-colors pointer-coarse:py-2.5 ${
+                viewStyle === s ? 'bg-navy-700 text-navy-100' : 'text-navy-300 hover:text-navy-100'
+              }`}
+            >
+              {s === 'illustrated' ? 'Illustrated' : 'Technical'}
+            </button>
+          ))}
+        </div>
+        <p className="hidden text-[12.5px] text-navy-300 @min-[56rem]:block">{active.hint}</p>
         <div className="ml-auto flex items-center gap-4">
           <label
             className="flex items-center gap-1.5 text-[12.5px] text-navy-300 pointer-coarse:min-h-11"
-            title="Also show indices, declaration kinds and null children."
+            title={
+              viewStyle === 'illustrated'
+                ? 'Add indices, variable names and the collection state in code terms to the scenes.'
+                : 'Also show indices, declaration kinds and null children.'
+            }
           >
             <input
               type="checkbox"
@@ -56,7 +83,7 @@ export function VizPanel() {
               onChange={(e) => setDetails(e.target.checked)}
               className="accent-teal-400 pointer-coarse:size-5"
             />
-            Show details
+            {viewStyle === 'illustrated' ? 'Technical overlay' : 'Show details'}
           </label>
           <label
             className="flex items-center gap-1.5 text-[12.5px] text-navy-300 pointer-coarse:min-h-11"

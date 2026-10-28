@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useStore } from '../state/store';
-import { CallStack, FrameContent, Structures, type BoardContext } from '../viz/Board';
+import { CallStack, FrameContent, IllustratedNote, Structures, type BoardContext } from '../viz/Board';
 import { NO_OVERRIDES, resolveBindings } from '../viz/bindings';
 import { EMPTY_FOCUS } from '../viz/focus';
 import { BindingsPanel } from './BindingsPanel';
@@ -18,6 +18,8 @@ export function BuildView() {
   const selectNode = useStore((s) => s.selectNode);
   const startRun = useStore((s) => s.startRun);
   const details = useStore((s) => s.showDetails);
+  const illustrated = useStore((s) => s.viewStyle === 'illustrated');
+  const revealLine = useStore((s) => s.revealLine);
   const current = live.result;
   const drawn = current?.step ? current : live.lastDrawn;
   const step = drawn?.step ?? null;
@@ -52,6 +54,8 @@ export function BuildView() {
         selectedNode,
         onSelectNode: (id) => selectNode(selectedNode === id ? null : id),
         details,
+        illustrated,
+        onRevealLine: revealLine,
       }
     : null;
   const functions = (current ?? drawn)!.hints.functions;
@@ -120,11 +124,12 @@ export function BuildView() {
               ) : (
                 <section
                   aria-label="Top-level variables"
-                  className="rounded-3xl bg-navy-900/90 p-4 shadow-[inset_0_0_0_1px_rgb(125_145_181/0.18)] sm:p-5"
+                  className="w-fit min-w-full rounded-3xl bg-navy-900/90 p-4 shadow-[inset_0_0_0_1px_rgb(125_145_181/0.18)] sm:p-5"
                 >
                   <FrameContent frame={program} ctx={ctx} active />
                 </section>
               ))}
+            {illustrated && <IllustratedNote />}
           </div>
         ) : (
           <div className="max-w-md text-[14px] text-navy-300">

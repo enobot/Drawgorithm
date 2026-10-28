@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { parseValue, suggestStructures } from '../problems/pasted';
 import { deepEqual } from '../problems/compare';
 import { missingInputs } from '../problems/inputs';
@@ -11,12 +11,49 @@ import { ListView } from '../viz/ListView';
 import { TreeView } from '../viz/TreeView';
 import { ValueText } from '../viz/Value';
 import { previewHeap } from '../viz/preview';
+import { isPracticeId } from '../practice/problems';
+import { PracticeBrowser } from './PracticeBrowser';
+import { PracticePanel } from './PracticePanel';
 
 const KINDS: { value: InputKind; label: string }[] = [
   { value: 'auto', label: 'value' },
   { value: 'tree', label: 'binary tree' },
   { value: 'list', label: 'linked list' },
 ];
+
+/**
+ * Shrinks a wide picture to the panel's width (never enlarges it), so a big input stays a
+ * preview instead of pushing the whole panel sideways. Past the smallest readable scale,
+ * the preview scrolls on its own.
+ */
+function FitWidth({ children }: { children: ReactNode }) {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState({ scale: 1, height: 0 });
+  useLayoutEffect(() => {
+    const o = outer.current;
+    const i = inner.current;
+    if (!o || !i) return;
+    const measure = () => {
+      const scale = Math.max(0.45, Math.min(1, o.clientWidth / Math.max(i.scrollWidth, 1)));
+      const height = i.scrollHeight;
+      setFit((f) => (f.scale === scale && f.height === height ? f : { scale, height }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(o);
+    ro.observe(i);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    // Exactly as tall as the shrunk picture; the unscaled layout box must not add a vertical scrollbar.
+    <div ref={outer} className="overflow-x-auto overflow-y-hidden" style={{ height: fit.height ? fit.height * fit.scale : undefined }}>
+      <div ref={inner} style={fit.scale === 1 ? undefined : { transform: `scale(${fit.scale})`, transformOrigin: '0 0' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /** Draws one input the way the board would, so the problem has a picture before any code runs. */
 function InputPicture({ row }: { row: InputRow }) {
@@ -35,22 +72,30 @@ function InputPicture({ row }: { row: InputRow }) {
     const labels = nodeLabels(step.frames, heap);
     if (row.kind === 'tree') {
       return (
-        <TreeView
-          diagram={buildTreeDiagram(heap, [id], new Set([id]))}
-          heap={heap}
-          labels={labels}
-          written={EMPTY_FOCUS.propWrites}
-          created={EMPTY_FOCUS.created}
-        />
+        <FitWidth>
+          <TreeView
+            diagram={buildTreeDiagram(heap, [id], new Set([id]))}
+            heap={heap}
+            labels={labels}
+            written={EMPTY_FOCUS.propWrites}
+            created={EMPTY_FOCUS.created}
+          />
+        </FitWidth>
       );
     }
-    return <ListView diagram={buildListDiagram(heap, [id], new Set([id]))} heap={heap} labels={labels} written={[]} created={new Set()} />;
+    return (
+      <FitWidth>
+        <ListView diagram={buildListDiagram(heap, [id], new Set([id]))} heap={heap} labels={labels} written={[]} created={new Set()} />
+      </FitWidth>
+    );
   }
   if (h?.kind === 'array') {
     return (
-      <div className="overflow-x-auto pb-1">
-        <Cells items={h.items} total={h.total} heap={heap} markers={[]} reads={new Set()} writes={new Set()} role="array" />
-      </div>
+      <FitWidth>
+        <div className="p-1">
+          <Cells items={h.items} total={h.total} heap={heap} markers={[]} reads={new Set()} writes={new Set()} role="array" />
+        </div>
+      </FitWidth>
     );
   }
   return null;
@@ -128,6 +173,7 @@ export function ProblemPanel() {
   const addInput = useStore((s) => s.addInput);
   const removeInput = useStore((s) => s.removeInput);
   const hints = useStore((s) => (s.live.result?.status === 'pending' ? s.live.lastDrawn?.hints : s.live.result?.hints));
+  const [practiceOpen, setPracticeOpen] = useState(false);
   const p = problemFor(problemId, custom);
   const isCustom = problemId === CUSTOM_ID;
   const expectedOk = !work.expectedText.trim() || parseValue(work.expectedText).ok;
@@ -144,11 +190,16 @@ export function ProblemPanel() {
       <header className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
           <h2 className="text-[19px] font-bold leading-tight text-navy-100">{p.title}</h2>
-          {!isCustom && (
-            <button type="button" className="btn-quiet h-7 shrink-0 px-2 text-[12px]" onClick={() => selectProblem(CUSTOM_ID)}>
-              Paste a problem
+          <div className="flex shrink-0 gap-1">
+            <button type="button" className="btn-quiet h-7 px-2 text-[12px]" onClick={() => setPracticeOpen(true)}>
+              Practice
             </button>
-          )}
+            {!isCustom && (
+              <button type="button" className="btn-quiet h-7 px-2 text-[12px]" onClick={() => selectProblem(CUSTOM_ID)}>
+                Paste a problem
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {p.tags.map((t) => (
@@ -300,6 +351,9 @@ export function ProblemPanel() {
           </ul>
         </section>
       )}
+
+      {isPracticeId(problemId) && <PracticePanel exerciseId={problemId} />}
+      {practiceOpen && <PracticeBrowser onClose={() => setPracticeOpen(false)} />}
     </div>
   );
 }

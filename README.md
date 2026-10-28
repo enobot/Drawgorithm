@@ -26,7 +26,23 @@ No API key or backend is needed. Code and settings are saved in the browser (loc
 - **Editor**: Run (Ctrl+Enter), Reset, Format Code (Shift+Alt+F, Prettier), optional format on save (Ctrl+S). Unfinished or invalid code is never formatted.
 - **Build tab**: draws what top-level code builds (e.g. `const root = new TreeNode(5)`). Function bodies wait for Run. Put the cursor on a line to highlight what it built; click a node to see which lines created and connected it. While code is unfinished, invalid, unsupported or failing, the last valid drawing stays, labeled **Previous valid state**.
 - **Run tab**: play/pause, step back/forward (← →), Home/End, speed, draggable timeline. A run that finishes shows the actual result next to the expected output, even when the answer is wrong. A run that fails or hits a limit is not drawn as a result: you get the error and its line, the last successful run stays visible (labeled), and you can choose to step through what ran before it stopped.
-- **Drawing board**: every state has a color and a word (now, compared, changed, new, visited, answer, problem), so nothing depends on color alone. **Show details** adds indices, declaration kinds and null children. Zoom with the − / + / Fit buttons, Ctrl/⌘ + wheel or a trackpad pinch, or two fingers on a touch screen; pan by scrolling or dragging empty board. Plain scrolling is never captured. Motion follows the operating system's reduced-motion setting.
+- **Drawing board**: every state has a color and a word (now, compared, changed, new, visited, answer, problem), so nothing depends on color alone. **Show details** adds indices, declaration kinds and null children. Zoom with the − / + / Fit buttons, Ctrl/⌘ + wheel or a trackpad pinch, or two fingers on a touch screen; the percentage button resets the view (100%, back to the top). Pan by scrolling or dragging empty board. Plain scrolling is never captured, and the view never recenters by itself. Motion follows the operating system's reduced-motion setting.
+- **How structures are laid out**: drawings are never clipped. Each one is sized to its full bounds with padding, and anything wider than the board makes the board scroll (labels are not shrunk below 40% zoom). Small trees (up to 3 levels) use fixed slots, so nodes stay put while the tree grows; bigger trees use a compact layout where every single child leans to its own side. Variable labels sit beside the branch that arrives from the parent and move up a row instead of touching a neighbor. Linked-list nodes keep one place for a whole run, so when code re-points `next` the arrow swings to the new target while the nodes stay still (reversing a list flips arrows in place). Cycles are drawn as dashed rose arrows that loop back, with the explanation underneath.
+
+## Illustrated and Technical views
+
+The Visual panel has two picture styles, switchable at any time without changing the run or the step:
+
+- **Illustrated**: sketchbook scenes drawn from the same trace. A **queue** (an array the code uses with `shift()`) is a line of people at a counter: `push()` adds someone at the back, `shift()` serves the front person (the clerk waves and the scene says who was served). A **linked list** is people holding one-way ropes: each rope is that node's `next`, it swings when `next` is re-pointed, and a loose rope means `null`. An **array read through index variables** (binary search, linear search) is a row of numbered shelf slots: index variables are flags, a shopper stands at the slot the code read most recently, a thought bubble shows the comparison the code actually made, and slots outside a `left..right` window are taped off. Each scene says how the analogy is simplified. **Technical overlay** adds indices and the collection state in code terms. Clicking a person in the queue scrolls the editor to the line where they joined.
+- **Technical**: the cell, node and arrow drawings.
+
+Trees, maps, sets, stacks and grids are drawn the technical way in both styles for now. Item identities in a queue come from the trace's recorded adds and removes; after an operation that reorders items without recording how (`sort`, `splice`), the scene starts over with a new arrangement instead of inventing movements.
+
+## Practice: Drawgorithm Foundations 75
+
+An optional, original practice collection (the **Practice** button in the Problem panel). It is written for Drawgorithms; it is not an official collection of any platform and makes no claim about which questions interviews use most. All 75 exercises are listed with a brief and the drawing they call for; **10 are available** (1, 2, 3, 4, 6, 17, 21, 26, 34, 36) and the rest are planned. An exercise becomes available only when its statement, formats, constraints, rules (empty input, duplicates, ties, ordering, mutation), examples, additional tests, starter code, progressive hints, reference solution with complexity and assumptions, and visualization are written, and `src/practice/foundations.test.ts` verifies them: the reference passes every case in the interpreter, every expected output matches an independent computation, the starter runs (and fails at least one case), and every drawing it needs is supported.
+
+Opening an exercise loads its examples as cases and its starter code into the editor. **Check all tests** runs the code in the editor on the examples and the additional tests in a separate engine worker (same limits as Run) and reports each case as passed, failed (expected vs. actual) or error. The reference solution sits behind its own reveal, labeled as authored and not the learner's code; the drawing always shows the editor's code. Prerequisite lessons are named but not written yet. Starter code exists for JavaScript, the only language the interpreter runs today.
 
 ## Screen sizes
 
@@ -63,6 +79,8 @@ src/
   state/           App state (zustand), persistence, which drawing is shown
   editor/          Monaco setup and the Prettier formatter
   problems/        Built-in examples, pasted-problem parsing, expected-vs-actual comparison
+  practice/        Foundations 75: exercise schema, catalog, authored exercises, test checker
+  viz/illustrated/ Illustrated scenes (queue, linked list, shelves) and their sketch kit
 ```
 
 User code is parsed with acorn and interpreted, never `eval`ed, so it cannot reach the worker's globals. Every step is plain data, so playback is deterministic in both directions and object identities (heap ids) stay stable across steps. Visuals are derived only from recorded state; explanations are written from what actually happened (the operator, the values, the branch taken).
@@ -71,4 +89,4 @@ Coverage, the capability matrix and the staged plan are in [docs/COVERAGE.md](do
 
 ## Tests
 
-`npm test` runs Vitest: trace generation, Two Sum duplicates, Binary Search boundaries, execution limits, unsupported syntax, Live Build (unfinished code, cycles, shared and detached nodes, null children), tree layout and traversal state, representative LeetCode-style patterns, the formatter, stale-run cancellation, demo links and zoom limits.
+`npm test` runs Vitest: trace generation, Two Sum duplicates, Binary Search boundaries, execution limits, unsupported syntax, Live Build (unfinished code, cycles, shared and detached nodes, null children), tree layout and traversal state, representative LeetCode-style patterns, the formatter, stale-run cancellation, demo links and zoom limits, queue item identities for the illustrated view, and the Foundations 75 catalog and checker.

@@ -66,9 +66,23 @@ class WorkerSlot {
 
 const runSlot = new WorkerSlot();
 const liveSlot = new WorkerSlot();
+/** Practice "Check all tests" runs here, so checking never cancels the run being watched. */
+const checkSlot = new WorkerSlot();
 
 export async function runInWorker(request: RunRequest): Promise<RunResult> {
   const res = await runSlot.send(
+    (id) => ({ id, language: 'javascript', type: 'run', request }),
+    RUN_TIME_LIMIT_MS,
+    `Stopped after ${RUN_TIME_LIMIT_MS / 1000} seconds without finishing.`,
+  );
+  if (res.type === 'crash') throw new EngineStopped('crashed', res.message);
+  if (res.type !== 'run') throw new EngineStopped('crashed', 'Unexpected engine response.');
+  return res.result;
+}
+
+/** Runs code for a test check, with the same isolation and limits as a normal run. */
+export async function checkInWorker(request: RunRequest): Promise<RunResult> {
+  const res = await checkSlot.send(
     (id) => ({ id, language: 'javascript', type: 'run', request }),
     RUN_TIME_LIMIT_MS,
     `Stopped after ${RUN_TIME_LIMIT_MS / 1000} seconds without finishing.`,

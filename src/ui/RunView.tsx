@@ -3,8 +3,9 @@ import { compareRun } from '../problems/compare';
 import { currentWork, displayedRun, problemFor, runFailed, useStore, type RunState } from '../state/store';
 import type { EngineError, Step, StepKind } from '../trace/types';
 import { buildTraversalIndex, traversalAt } from '../viz/analysis';
-import { CallStack, ResultBanner, Structures, type BoardContext } from '../viz/Board';
+import { CallStack, IllustratedNote, ResultBanner, Structures, type BoardContext } from '../viz/Board';
 import { focusOf } from '../viz/focus';
+import { listSlotsForSteps } from '../viz/listLayout';
 import { NO_OVERRIDES, resolveBindings } from '../viz/bindings';
 import { BindingsPanel } from './BindingsPanel';
 import { Inspector } from './Inspector';
@@ -123,6 +124,8 @@ export function RunView() {
   const code = useStore((s) => currentWork(s).code);
   const startRun = useStore((s) => s.startRun);
   const details = useStore((s) => s.showDetails);
+  const illustrated = useStore((s) => s.viewStyle === 'illustrated');
+  const revealLine = useStore((s) => s.revealLine);
   const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
   const sideBySide = useMedia(SHORT_WIDE);
   const display = useMemo(() => displayedRun({ run, problemId }), [run, problemId]);
@@ -134,12 +137,15 @@ export function RunView() {
     () => (result && step ? resolveBindings(step.heap, step.frames, result.hints, overrides) : null),
     [result, step, overrides],
   );
-  // Traversal state (visited, returned values) is read through the bindings of the final state.
-  const traversal = useMemo(() => {
+  // Traversal state (visited, returned values) and list node places are read through the bindings of the final state.
+  const runShapeOf = useMemo(() => {
     if (!result) return null;
     const last = result.steps[result.steps.length - 1];
-    return buildTraversalIndex(result.steps, resolveBindings(last.heap, last.frames, result.hints, overrides).shapeOf);
+    return resolveBindings(last.heap, last.frames, result.hints, overrides).shapeOf;
   }, [result, overrides]);
+  const traversal = useMemo(() => (result && runShapeOf ? buildTraversalIndex(result.steps, runShapeOf) : null), [result, runShapeOf]);
+  // List nodes keep one place for the whole run, so re-pointing `next` moves arrows, not boxes.
+  const listPlaces = useMemo(() => (result && runShapeOf ? listSlotsForSteps(result.steps, runShapeOf) : undefined), [result, runShapeOf]);
   const focus = useMemo(() => focusOf(step ?? null), [step]);
   const failed = run.problemId === problemId && runFailed(run) && run.status !== 'running';
 
@@ -185,6 +191,10 @@ export function RunView() {
     selectedNode,
     onSelectNode: (id) => selectNode(selectedNode === id ? null : id),
     details,
+    listSlots: listPlaces,
+    illustrated,
+    steps: result.steps,
+    onRevealLine: revealLine,
   };
   const comparison = step.kind === 'done' && display ? compareRun(display.expect, result) : null;
   // A trace is never presented as belonging to code it did not come from.
@@ -225,10 +235,9 @@ export function RunView() {
         </div>
       )}
       {running && !stale && <p className="mx-4 mt-3 text-[13px] text-navy-300">Running your code…</p>}
-      {!running && !stale && run.auto && display!.kind === 'current' && index >= result.steps.length - 1 && (
-        <p className="mx-4 mt-3 text-[12.5px] text-navy-300 short:hidden">
-          Ran automatically after your last edit. Press Play to watch it from the start.
-        </p>
+      {/* Shown for the whole run, not per step, so stepping never shifts the drawing. */}
+      {!running && !stale && run.auto && display!.kind === 'current' && (
+        <p className="mx-4 mt-3 text-[12.5px] text-navy-300 short:hidden">Ran automatically after your last edit.</p>
       )}
       {result.notes.map((n) => (
         <p key={n} className="mx-4 mt-3 text-[13px] text-navy-300">
@@ -240,7 +249,6 @@ export function RunView() {
       <div className="flex min-h-0 flex-1 flex-col short-wide:flex-row">
         <ZoomPan controlsSlot={sideBySide ? null : zoomSlot}>
           <div className="flex flex-col gap-5">
-            {step.kind === 'done' && <ResultBanner step={step} comparison={comparison} />}
             <Structures ctx={ctx} />
             {selectedNode !== null && step.heap[selectedNode] && (
               <NodeDetails
@@ -254,12 +262,14 @@ export function RunView() {
               />
             )}
             <CallStack ctx={ctx} />
+            {illustrated && <IllustratedNote />}
           </div>
         </ZoomPan>
         <div className="sticky bottom-0 z-10 flex flex-col gap-3 border-t border-navy-700 bg-navy-900 px-4 py-3 max-sm:gap-2 max-sm:py-2.5 short-wide:static short-wide:w-[19rem] short-wide:shrink-0 short-wide:gap-2 short-wide:overflow-y-auto short-wide:border-t-0 short-wide:border-l short-wide:py-2.5">
           {/* The zoom controls sit just above the pinned bar, so they stay visible however the view is scrolled. */}
           {!sideBySide && <div ref={setZoomSlot} className="absolute bottom-full right-3 mb-3" />}
-          <Explanation step={step} />
+          {/* The result lives with the explanation, so reaching the end never pushes the drawing down. */}
+          {step.kind === 'done' ? <ResultBanner step={step} comparison={comparison} /> : <Explanation step={step} />}
           <Playback total={result.steps.length} />
           <details className="group">
             <summary className="cursor-pointer select-none text-[13px] font-semibold text-navy-300 hover:text-navy-100">

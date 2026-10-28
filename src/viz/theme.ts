@@ -1,6 +1,7 @@
 // The shared visual language for every renderer: one set of states, each with a
 // color AND a text label, so meaning never depends on color alone.
 // Rings are soft glows (box-shadow), not hard borders.
+import { useReducedMotion } from 'motion/react';
 
 export type VisualState = 'idle' | 'current' | 'compare' | 'visited' | 'changed' | 'new' | 'result' | 'error';
 
@@ -60,6 +61,15 @@ export const STATE: Record<VisualState, StateStyle> = {
 
 /** Gentle spring used for movement that explains an action (gliding pointers, settling items). */
 export const GLIDE = { type: 'spring', stiffness: 260, damping: 30 } as const;
+const INSTANT = { duration: 0 } as const;
+
+/**
+ * GLIDE, or an instant change when the system asks for reduced motion. MotionConfig already
+ * stops transform animations; this also covers arrows (path shapes) and pointer positions.
+ */
+export function useGlide(): typeof GLIDE | typeof INSTANT {
+  return useReducedMotion() ? INSTANT : GLIDE;
+}
 /** Quick pop for a value that just changed. */
 export const POP = { type: 'spring', stiffness: 520, damping: 24 } as const;
 

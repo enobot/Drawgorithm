@@ -117,8 +117,9 @@ export function VarBlock({
         initial={state === 'changed' ? { scale: 1.14 } : false}
         animate={{ scale: 1 }}
         transition={POP}
-        className={`flex h-14 min-w-14 items-center justify-center rounded-2xl px-4 text-[20px] font-bold transition-shadow disabled:cursor-default ${style.fill} ${style.ring} ${
-          isNodeRef ? 'text-[15px] font-semibold' : ''
+        // Values are soft tiles; references to drawn nodes are lighter pills (the node itself is in the drawing).
+        className={`flex items-center justify-center transition-shadow disabled:cursor-default ${style.fill} ${style.ring} ${
+          isNodeRef ? 'h-10 rounded-full px-3.5 text-[14px] font-semibold' : 'h-12 min-w-12 rounded-2xl px-3.5 text-[18px] font-bold'
         }`}
         aria-label={`${name} = ${formatSnap(value, heap)}${s.label ? `, ${s.label}` : ''}`}
       >
@@ -147,16 +148,30 @@ export function VarBlock({
   );
 }
 
-/** A small name pill used on pointers and node labels; always shows the name, not just color. */
-export function NameTag({ name, faint = false, className = '' }: { name: string; faint?: boolean; className?: string }) {
+/**
+ * A small name pill used on pointers and node labels; always shows the name, not just color.
+ * `solid` backs the tint with the board color, so a line passing behind never shows through the text.
+ */
+export function NameTag({
+  name,
+  faint = false,
+  solid = false,
+  className = '',
+}: {
+  name: string;
+  faint?: boolean;
+  solid?: boolean;
+  className?: string;
+}) {
   const color = varColor(name);
-  return (
+  const tag = (
     <span
       className={`inline-flex items-center rounded-full px-2 py-px text-[11.5px] font-bold leading-[18px] ${
         faint ? 'bg-navy-800 text-navy-400' : `${color.soft} ${color.text} shadow-[inset_0_0_0_1px_currentColor]`
-      } ${className}`}
+      } ${solid ? '' : className}`}
     >
       {name}
     </span>
   );
+  return solid ? <span className={`inline-flex rounded-full bg-navy-950 ${className}`}>{tag}</span> : tag;
 }

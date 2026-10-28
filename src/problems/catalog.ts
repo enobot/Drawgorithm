@@ -1,5 +1,6 @@
 // Built-in examples. Descriptions are written for Drawgorithms; the starter code
 // is ordinary JavaScript that the interpreter runs exactly as edited.
+import { practiceProblemById } from '../practice/problems';
 import type { ExpectSpec, InputKind } from '../trace/types';
 
 export interface ProblemCase {
@@ -90,6 +91,35 @@ let b = 5;
 let sum = a + b;
 `,
     tryThis: ['Change b to 10.', 'Add a line: a = a + 1; then compare a and sum.'],
+  },
+  {
+    id: 'serve-line',
+    title: 'Serve the Line (Queue)',
+    tags: ['Array', 'Queue'],
+    description: [
+      'A ticket counter: people join at the back of the line and are served from the front, first come, first served.',
+      'push() adds a value at the end of the array (the back of the line). shift() removes and returns the first value (the front).',
+    ],
+    explanation:
+      'A queue is first in, first out: whoever joined earliest is served next. Using one array, push() is joining the line and shift() is being served.',
+    mode: 'script',
+    params: [],
+    cases: [{ label: 'Example', inputs: {}, expected: { kind: 'variables', values: { first: 7, second: 3, waiting: 2 } } }],
+    starter: `// A ticket counter: join at the back, get served from the front.
+const line = [];
+line.push(7);
+line.push(3);
+line.push(9);
+
+const first = line.shift(); // the person who joined first
+line.push(5);
+const second = line.shift();
+const waiting = line.length;
+`,
+    tryThis: [
+      'Swap shift() for pop(). Who gets served now?',
+      'Add line.push(1) before the first shift() and watch where the new person stands.',
+    ],
   },
   {
     id: 'two-sum',
@@ -247,6 +277,7 @@ let sum = a + b;
 
 export const DEFAULT_PROBLEM_ID = 'tree-build';
 
+/** A built-in example, or an available Foundations 75 exercise. */
 export function problemById(id: string): ProblemDef | undefined {
-  return PROBLEMS.find((p) => p.id === id);
+  return PROBLEMS.find((p) => p.id === id) ?? practiceProblemById(id);
 }
