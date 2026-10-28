@@ -54,7 +54,9 @@ Switching tabs, rotating or resizing keeps the code, the editor's cursor and und
 
 **Demo links** open an example directly, e.g. `/?example=two-sum&view=visual` (ids: `tree-build`, `variables`, `two-sum`, `binary-search`, `level-order`, `reverse-list`; views: `problem`, `code`, `visual`). The parameters are removed from the address after loading, and a visitor's saved work for that example is kept.
 
-Tested so far in Chromium's device emulation (375×812 portrait, 812×375 landscape, 768×1024, 1366×768). Not yet tested on a real iPhone (Safari) or Android phone.
+Tested so far in Chromium's device emulation (375×812 portrait, 812×375 landscape, 768×1024, 1366×768). Not yet tested on a real iPhone (Safari) or Android phone; [docs/PHONE-TESTING.md](docs/PHONE-TESTING.md) explains how to open the dev server on a phone and what to check.
+
+Motion was checked frame by frame in headless Edge: people in the queue scene glide to their new places with swinging legs that stop when they arrive, list ropes swing to their new target while the nodes stay put, and with the reduced-motion setting emulated (the same media query the OS sets) everything changes at once, with no walking.
 
 ## Supported JavaScript (the first language adapter)
 

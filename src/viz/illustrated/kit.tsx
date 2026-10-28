@@ -1,7 +1,7 @@
 // Shared pieces for the illustrated scenes: a sketchbook page, stick figures, value
 // cards, variable flags, ropes and thought bubbles. Scenes are drawn from the same
 // execution trace as the technical view; these pieces only change how it looks.
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { varColor } from '../colors';
 import { useGlide } from '../theme';
@@ -149,9 +149,23 @@ export function StickFigure({
   );
 }
 
+/** A held card is never much wider than the figure holding it (wider ones read as a big body). */
+const MAX_CARD = 44;
+const CARD_PAD = 14;
+
+/** Fits text on a card: a smaller hand first, then an ellipsis (callers keep the full value in a tooltip). */
+function fitText(text: string, base: number): { shown: string; size: number } {
+  let size = base;
+  while (size > 13 && handWidth(text, size) + CARD_PAD > MAX_CARD) size--;
+  if (handWidth(text, size) + CARD_PAD <= MAX_CARD) return { shown: text, size };
+  const chars = Math.max(1, Math.floor((MAX_CARD - CARD_PAD) / (size * 0.5)) - 1);
+  return { shown: `${text.slice(0, chars)}…`, size };
+}
+
 /**
- * A value written on a card in front of a figure (centered at (0, cy)). `held` draws the
- * figure's arms reaching from the shoulders to the card's sides, with a hand on each edge.
+ * A value held in front of a figure (centered at (0, cy)): a card, or, for a reference to a
+ * tree or list node, a round token like the nodes in the technical drawing. `held` draws the
+ * arms reaching from the shoulders to the card's edges.
  */
 export function ValueCard({
   text,
@@ -159,38 +173,40 @@ export function ValueCard({
   cy = -32,
   small = false,
   held = true,
+  node = false,
 }: {
   text: string;
   tone?: Tone;
   cy?: number;
   small?: boolean;
   held?: boolean;
+  /** The value is a node: drawn as a round token showing the node's value. */
+  node?: boolean;
 }) {
-  const size = small ? 14 : 18;
-  const w = Math.max(30, handWidth(text, size) + 16);
+  const { shown, size } = fitText(text, small ? 14 : 18);
+  const stroke = tone === 'idle' ? INK : TONE[tone];
+  const strokeWidth = tone === 'idle' ? 1.8 : 2.8;
+  const half = node ? Math.max(13, handWidth(shown, size) / 2 + 6) : Math.max(15, (handWidth(shown, size) + CARD_PAD) / 2);
   const h = small ? 20 : 26;
+  // Hands hold the card near its top corners, so the arms read as holding a sign.
+  const handY = node ? cy : cy - h / 2 + 5;
   const arm = { stroke: INK, strokeWidth: 2.4, strokeLinecap: 'round' as const, fill: 'none' };
   return (
     <g>
-      <rect
-        x={-w / 2}
-        y={cy - h / 2}
-        width={w}
-        height={h}
-        rx={7}
-        fill={CARD}
-        stroke={tone === 'idle' ? INK : TONE[tone]}
-        strokeWidth={tone === 'idle' ? 1.8 : 2.8}
-      />
+      {node ? (
+        <circle cx={0} cy={cy} r={half} fill={CARD} stroke={stroke} strokeWidth={strokeWidth} />
+      ) : (
+        <rect x={-half} y={cy - h / 2} width={half * 2} height={h} rx={7} fill={CARD} stroke={stroke} strokeWidth={strokeWidth} />
+      )}
       <text x={0} y={cy + size * 0.36} textAnchor="middle" fontSize={size} fontFamily={HAND} fill={INK}>
-        {text}
+        {shown}
       </text>
       {held && (
         <>
-          <path d={`M 0 -44 Q ${-w / 2 - 6} -42 ${-w / 2} ${cy}`} {...arm} />
-          <path d={`M 0 -44 Q ${w / 2 + 6} -42 ${w / 2} ${cy}`} {...arm} />
-          <circle cx={-w / 2} cy={cy} r={2.6} fill={CARD} stroke={INK} strokeWidth={1.6} />
-          <circle cx={w / 2} cy={cy} r={2.6} fill={CARD} stroke={INK} strokeWidth={1.6} />
+          <path d={`M 0 -44 Q ${-half + 1} -44 ${-half} ${handY}`} {...arm} />
+          <path d={`M 0 -44 Q ${half - 1} -44 ${half} ${handY}`} {...arm} />
+          <circle cx={-half} cy={handY} r={2.6} fill={CARD} stroke={INK} strokeWidth={1.6} />
+          <circle cx={half} cy={handY} r={2.6} fill={CARD} stroke={INK} strokeWidth={1.6} />
         </>
       )}
     </g>
@@ -319,17 +335,19 @@ export function Mover({
   children: (walking: boolean) => ReactNode;
 }) {
   const glide = useGlide();
+  // With reduced motion nobody walks: things appear, move and leave in place (a fade only).
+  const reduce = !!useReducedMotion();
   const [walking, setWalking] = useState(false);
   return (
     <motion.g
-      initial={enterFrom ? { x: x + enterFrom.dx, y: y + (enterFrom.dy ?? 0), opacity: 0 } : { x, y, opacity: 0 }}
+      initial={enterFrom && !reduce ? { x: x + enterFrom.dx, y: y + (enterFrom.dy ?? 0), opacity: 0 } : { x, y, opacity: 0 }}
       animate={{ x, y, opacity: 1 }}
-      exit={exitTo ? { x: x + exitTo.dx, y: y + (exitTo.dy ?? 0), opacity: 0, transition: { duration: 0.55 } } : { opacity: 0 }}
+      exit={exitTo && !reduce ? { x: x + exitTo.dx, y: y + (exitTo.dy ?? 0), opacity: 0, transition: { duration: 0.55 } } : { opacity: 0 }}
       transition={glide}
-      onAnimationStart={() => setWalking(true)}
+      onAnimationStart={() => !reduce && setWalking(true)}
       onAnimationComplete={() => setWalking(false)}
     >
-      {children(walking)}
+      {children(walking && !reduce)}
     </motion.g>
   );
 }

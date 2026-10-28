@@ -1,6 +1,10 @@
 import { MotionConfig } from 'motion/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from 'react-resizable-panels';
+import { AccountButton, AuthDialog } from '../auth/AuthUI';
+import { authClient } from '../auth/client';
+import { connectAuth } from '../auth/store';
 import { withoutDeepLink, type Pane } from '../state/deepLink';
 import { canAutoRun } from '../state/live';
 import { currentWork, displayedRun, useStore } from '../state/store';
@@ -184,7 +188,7 @@ function useConsumeDeepLink() {
   }, []);
 }
 
-function DesktopLayout() {
+function DesktopLayout({ tools }: { tools: HTMLElement | null }) {
   const problemRef = usePanelRef();
   const codeRef = usePanelRef();
   const [collapsed, setCollapsed] = useState({ problem: false, code: false });
@@ -196,7 +200,8 @@ function DesktopLayout() {
   };
   return (
     <>
-      <PanelToggles collapsed={collapsed} onToggle={toggle} />
+      {/* Shown in the header row, next to the account button. */}
+      {tools && createPortal(<PanelToggles collapsed={collapsed} onToggle={toggle} />, tools)}
       <Group
         orientation="horizontal"
         className="min-h-0 flex-1 px-3 pb-3"
@@ -238,14 +243,14 @@ function PanelToggles({
   onToggle: (w: 'problem' | 'code') => void;
 }) {
   return (
-    <div className="pointer-events-none absolute right-4 top-2.5 flex gap-1">
+    <div className="flex gap-1">
       {(['problem', 'code'] as const).map((w) => (
         <button
           key={w}
           type="button"
           onClick={() => onToggle(w)}
           aria-pressed={!collapsed[w]}
-          className={`pointer-events-auto rounded-md border px-2 py-0.5 text-[12px] font-semibold ${
+          className={`rounded-md border px-2 py-0.5 text-[12px] font-semibold ${
             collapsed[w] ? 'border-navy-600 text-navy-400 hover:text-navy-100' : 'border-navy-500 text-navy-200 hover:border-navy-300'
           }`}
         >
@@ -377,17 +382,23 @@ export function App() {
     // Open with a working demo. With auto-run on, the first validation starts the run instead.
     if (!useStore.getState().autoRun) void startRun({ background: true });
   }, [startRun]);
+  // Sign-in is optional: without a Supabase project in .env.local it stays off and the app works the same.
+  useEffect(() => connectAuth(authClient), []);
+  const [tools, setTools] = useState<HTMLDivElement | null>(null);
 
   return (
     <MotionConfig reducedMotion="user">
       <div className="app-shell relative flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
         {/* Phones in landscape need every pixel of height for the panels, so the header steps aside. */}
-        <header className="flex items-center gap-3 px-4 py-2.5 short:sr-only">
+        <header className="flex items-center gap-3 px-4 py-2 short:sr-only">
           <Logo />
           <h1 className="text-[17px] font-extrabold tracking-tight text-navy-100">Drawgorithms</h1>
-          <p className="hidden text-[13px] text-navy-400 sm:block">See what your code does, step by step.</p>
+          <p className="hidden text-[13px] text-navy-400 lg:block">See what your code does, step by step.</p>
+          <div ref={setTools} className="ml-auto flex items-center" />
+          <AccountButton />
         </header>
-        {mode === 'wide' ? <DesktopLayout /> : mode === 'medium' ? <MediumLayout /> : <NarrowLayout />}
+        {mode === 'wide' ? <DesktopLayout tools={tools} /> : mode === 'medium' ? <MediumLayout /> : <NarrowLayout />}
+        <AuthDialog />
       </div>
     </MotionConfig>
   );

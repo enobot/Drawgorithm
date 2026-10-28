@@ -4,3 +4,6 @@ dist/
 recordings/
 *.log
 .vite/
+# Local settings, e.g. the Supabase project URL and key (see .env.example)
+.env.local
+.env.*.local

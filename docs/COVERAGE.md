@@ -91,6 +91,10 @@ Available (authored and verified by `src/practice/foundations.test.ts`): 1 Shelf
 4. **Stage 4**: backtracking decision tree built from the recorded call tree; divide and conquer; bit view; intervals and prefix sums.
 5. **Stage 5**: a second language adapter emitting the same trace contract. Candidate: Python via Pyodide (CPython compiled to WebAssembly) in a worker, traced with `sys.settrace`. Java and C++ need a server-side sandbox (container or microVM with CPU, memory, time and output quotas and no network); a browser worker alone does not isolate native runtimes. Each language gets its own row in the matrix above only after its tests pass.
 
+## Known dependency advisories
+
+- **DOMPurify (critical in `npm audit`, GHSA-p98j-92pf-mc4p, -6688-9rhm-gjv2, -cg2g-xh64-v4q7, -mrv2-3pqr-j5jr, -c6gr-qvv4-5v3f).** Monaco 0.57.0, the latest release, bundles its own copy of DOMPurify 3.4.15 (`monaco-editor/esm/vs/base/browser/dompurify/dompurify.js`); that copy, not the `dompurify` npm package, is what runs. Every advisory needs `IN_PLACE`, `SAFE_FOR_TEMPLATES` or `PARSER_MEDIA_TYPE`. Monaco's `domSanitize.js` uses none of them (it calls `sanitize` with `RETURN_DOM_FRAGMENT` and sanitizing hooks), and in Drawgorithms the HTML it sanitizes is hover documentation from the learner's own code and the TypeScript library, in their own browser. Assessed as not reachable; not fixed, because `npm audit fix --force` would downgrade Monaco and an npm override would not change the bundled copy. Re-check when a Monaco release ships DOMPurify 3.4.17 or later (`npm view monaco-editor@latest dependencies`). Assessed 2026-10-27.
+
 ## Product and licensing notes
 
 - Runtime dependencies are MIT licensed (React, Monaco, motion, react-resizable-panels, zustand, acorn, Prettier); fonts (Manrope, IBM Plex Mono, Patrick Hand) are SIL OFL 1.1. Re-check before adding runtimes such as Pyodide (MPL-2.0) or compilers.

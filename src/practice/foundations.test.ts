@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { runProgram } from '../engine/run';
 import { deepEqual } from '../problems/compare';
 import { problemById } from '../problems/catalog';
+import { EngineStopped } from '../worker/client';
 import { checkExercise } from './check';
 import { FOUNDATIONS, LESSONS, SUPPORTED_RENDERERS } from './foundations';
 import type { Exercise, ExerciseCase } from './schema';
@@ -197,6 +198,22 @@ describe('Check all tests', () => {
     const results = await checkExercise(e, e.content!.starter.javascript, run);
     const failed = results.find((r) => r.status === 'failed')!;
     expect(failed.message).toContain('Expected');
+  });
+
+  it('retries once when the engine worker itself crashes', async () => {
+    let crashes = 1;
+    const flaky = (req: Parameters<typeof runProgram>[0]) => {
+      if (crashes-- > 0) return Promise.reject(new EngineStopped('crashed', 'worker died'));
+      return Promise.resolve(runProgram(req));
+    };
+    const results = await checkExercise(e, e.content!.solution.code, flaky);
+    expect(results.every((r) => r.status === 'passed')).toBe(true);
+  });
+
+  it('reports an engine that keeps crashing as an error that is not the learner’s fault', async () => {
+    const broken = () => Promise.reject(new EngineStopped('crashed', 'worker died'));
+    const results = await checkExercise(e, e.content!.solution.code, broken);
+    expect(results.every((r) => r.status === 'error' && r.message.includes('not in your code'))).toBe(true);
   });
 
   it('reports a crash as an error, not a failure', async () => {

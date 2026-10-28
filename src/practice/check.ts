@@ -2,6 +2,7 @@
 // one at a time, and reports each result as it really came out.
 import { compareRun } from '../problems/compare';
 import type { RunRequest, RunResult } from '../trace/types';
+import { EngineStopped } from '../worker/client';
 import type { Exercise } from './schema';
 
 export interface CaseResult {
@@ -11,6 +12,30 @@ export interface CaseResult {
   status: 'passed' | 'failed' | 'error';
   /** What happened, in plain words (expected vs. actual, or the error). */
   message: string;
+}
+
+/**
+ * The engine worker can die for reasons unrelated to the learner's code (for example while
+ * the dev server reloads modules). Errors in their code come back as a finished result, never
+ * as a crash, so a crash is retried once on a fresh worker before it is reported.
+ */
+async function runRetryingCrash(run: (req: RunRequest) => Promise<RunResult>, request: RunRequest): Promise<RunResult> {
+  try {
+    return await run(request);
+  } catch (err) {
+    if (!(err instanceof EngineStopped) || err.reason !== 'crashed') throw err;
+    try {
+      return await run(request);
+    } catch (again) {
+      if (again instanceof EngineStopped && again.reason === 'crashed') {
+        throw new Error(
+          `The engine stopped unexpectedly twice (${again.message}). That is a problem in Drawgorithms, not in your code. Try again.`,
+          { cause: again },
+        );
+      }
+      throw again;
+    }
+  }
 }
 
 export async function checkExercise(e: Exercise, code: string, run: (req: RunRequest) => Promise<RunResult>): Promise<CaseResult[]> {
@@ -30,7 +55,7 @@ export async function checkExercise(e: Exercise, code: string, run: (req: RunReq
       resultKind: c.resultKind,
     };
     try {
-      const result = await run(request);
+      const result = await runRetryingCrash(run, request);
       if (result.status !== 'finished') {
         results.push({ label: x.label, note: x.note, status: 'error', message: result.error?.message ?? 'The run did not finish.' });
         continue;

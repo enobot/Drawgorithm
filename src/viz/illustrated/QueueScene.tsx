@@ -39,6 +39,16 @@ function itemText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): string {
   return formatSnap(v, heap, 1);
 }
 
+/** What a person holds: a node reference is a round token with the node's value; anything else is written on a card. */
+function held(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): { text: string; node: boolean } {
+  if (v.t === 'ref') {
+    const h = heap[v.id];
+    const shape = shapeOf(h);
+    if (h && shape) return { text: nodeValueLabel(h as ObjectSnap, heap, shape), node: true };
+  }
+  return { text: formatSnap(v, heap, 1), node: false };
+}
+
 /**
  * A queue as people waiting at a counter: push() adds someone at the back, shift()
  * serves the person at the front. Driven by the array's recorded adds and removes.
@@ -84,8 +94,9 @@ export function QueueScene({
       label={`${name}: a line of ${n} ${n === 1 ? 'person' : 'people'}`}
       note={
         <>
-          Each person is one item of <b>{name}</b>. push() adds someone at the back; shift() serves the person at the front. Simplified: in
-          a real array every remaining item moves down one index when the front leaves; here the line steps forward.
+          Each person is one item of <b>{name}</b>. push() adds someone at the back; shift() serves the person at the front.
+          {arr.items.some((v) => held(v, heap, shapeOf).node) ? ' A round token is a reference to a node, showing that node’s value.' : ''}{' '}
+          Simplified: in a real array every remaining item moves down one index when the front leaves; here the line steps forward.
         </>
       }
       overlay={
@@ -155,7 +166,7 @@ export function QueueScene({
                 >
                   <title>{`${name}[${i}] = ${itemText(v, heap, shapeOf)}${line ? ` (joined at line ${line})` : ''}`}</title>
                   <StickFigure pose="hold" tone={tone} walking={walking} facing={-1} filter={sketch}>
-                    <ValueCard text={itemText(v, heap, shapeOf)} tone={tone} />
+                    <ValueCard {...held(v, heap, shapeOf)} tone={tone} />
                   </StickFigure>
                   {note && <Label x={0} y={-74} text={note} color={TONE[tone]} size={15} />}
                   {i === 0 && <Label x={0} y={20} text={n === 1 ? 'front & back' : 'front'} size={14} color="#5b6178" />}

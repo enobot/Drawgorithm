@@ -209,5 +209,7 @@
   *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    /* Endless animations (walking legs, the running pulse) would otherwise cycle at that speed. */
+    animation-iteration-count: 1 !important;
   }
 }
