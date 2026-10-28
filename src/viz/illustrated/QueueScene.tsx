@@ -95,7 +95,9 @@ export function QueueScene({
       note={
         <>
           Each person is one item of <b>{name}</b>. push() adds someone at the back; shift() serves the person at the front.
-          {arr.items.some((v) => held(v, heap, shapeOf).node) ? ' A round token is a reference to a node, showing that node’s value.' : ''}{' '}
+          {arr.items.some((v) => held(v, heap, shapeOf).node)
+            ? ' A round token is a reference to a node, showing that node’s value.'
+            : ''}{' '}
           Simplified: in a real array every remaining item moves down one index when the front leaves; here the line steps forward.
         </>
       }
