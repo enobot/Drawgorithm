@@ -8,7 +8,7 @@ import { connectAuth } from '../auth/store';
 import { markSince } from '../diagnostics';
 import { withoutDeepLink, type Pane } from '../state/deepLink';
 import { canAutoRun } from '../state/live';
-import { currentWork, displayedRun, useStore } from '../state/store';
+import { currentWork, displayedRun, shownCode, useStore } from '../state/store';
 import type { LiveResult } from '../trace/types';
 import { EngineStopped, liveInWorker } from '../worker/client';
 import { EditorPanel } from './EditorPanel';
@@ -47,7 +47,7 @@ let lastEditAt = 0;
 
 /** Redraws Live Build shortly after typing stops; never sends overlapping requests. */
 function useLiveBuild() {
-  const code = useStore((s) => currentWork(s).code);
+  const code = useStore(shownCode);
   const problemId = useStore((s) => s.problemId);
   const setLive = useStore((s) => s.setLive);
   const busy = useRef(false);
@@ -59,14 +59,14 @@ function useLiveBuild() {
       busy.current = true;
       try {
         const result = await liveInWorker(text);
-        if (currentWork(useStore.getState()).code === text) {
+        if (shownCode(useStore.getState()) === text) {
           setLive(result, text);
           markSince('edit-to-live', lastEditAt, result.status);
         }
       } catch (e) {
         // A stuck worker is terminated; say so instead of waiting forever. The last drawing stays.
         const failed = e instanceof EngineStopped && (e.reason === 'timeout' || e.reason === 'crashed');
-        if (failed && currentWork(useStore.getState()).code === text) {
+        if (failed && shownCode(useStore.getState()) === text) {
           setLive(
             liveFailure(
               e.reason === 'timeout'
@@ -98,7 +98,9 @@ function useLiveBuild() {
 function useAutoRun() {
   const autoRun = useStore((s) => s.autoRun);
   const live = useStore((s) => s.live);
-  const code = useStore((s) => currentWork(s).code);
+  const code = useStore(shownCode);
+  // A walkthrough replays the answer from its first step; an automatic run would jump to its end.
+  const walking = useStore((s) => s.walkthrough?.problemId === s.problemId);
   const inputsKey = useStore((s) => {
     const w = currentWork(s);
     return JSON.stringify([w.inputs, w.expectedText, s.problemId]);
@@ -107,7 +109,7 @@ function useAutoRun() {
   const last = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!autoRun || !canAutoRun(live, code)) return;
+    if (!autoRun || walking || !canAutoRun(live, code)) return;
     const key = code + '\u0000' + inputsKey;
     if (last.current === key) return;
     const t = window.setTimeout(() => {
@@ -116,7 +118,7 @@ function useAutoRun() {
       void startRun({ auto: true }).then(() => markSince('edit-to-run', editedAt, useStore.getState().run.status));
     }, 250);
     return () => window.clearTimeout(t);
-  }, [autoRun, live, code, inputsKey, startRun]);
+  }, [autoRun, walking, live, code, inputsKey, startRun]);
 }
 
 function isTypingTarget(el: EventTarget | null): boolean {

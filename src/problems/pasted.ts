@@ -123,6 +123,8 @@ export function parseProblemText(text: string): ParsedProblem {
   for (const input of examples[0]?.inputs ?? []) {
     const isArray = Array.isArray(input.parsed.value);
     if (isArray && lower.includes('linked list') && LIST_NAMES.test(input.name)) kinds[input.name] = 'list';
+    // The cycle convention: `pos` links the list's tail back into it and is not an argument.
+    else if (input.name === 'pos' && Number.isInteger(input.parsed.value) && lower.includes('linked list')) kinds[input.name] = 'pos';
     else if (isArray && /binary (search )?tree|\bbst\b/.test(lower) && TREE_NAMES.test(input.name)) kinds[input.name] = 'tree';
     else kinds[input.name] = 'auto';
   }

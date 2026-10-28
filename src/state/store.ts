@@ -29,6 +29,16 @@ export interface CustomProblem {
 }
 
 export type VizTab = 'build' | 'run';
+
+/** An authored answer played on the board in place of the learner's code, which is kept as it is. */
+export interface Walkthrough {
+  problemId: string;
+  code: string;
+  /** e.g. "37. Pick a Subset" */
+  title: string;
+  /** How the answer works, in the authored words. */
+  explanation: string[];
+}
 export type ViewStyle = 'illustrated' | 'technical' | 'both';
 
 export interface RunState {
@@ -101,6 +111,8 @@ interface State {
   boardZoom: number;
   /** The user's drawing choices per problem (see viz/bindings.ts). */
   bindings: Record<string, BindingOverrides>;
+  /** The answer being walked through, if any (never saved). */
+  walkthrough: Walkthrough | null;
 }
 
 interface Actions {
@@ -131,6 +143,10 @@ interface Actions {
   /** How to draw the Map or object a variable holds (graph, trie, plain); null goes back to automatic. */
   bindObject(name: string, role: ObjectRole | null): void;
   setInspectFailed(inspect: boolean): void;
+  /** Runs the authored answer on the selected inputs, from the first step; the learner's code stays untouched. */
+  startWalkthrough(w: Omit<Walkthrough, 'problemId'>): void;
+  /** Back to the learner's code, which is run again so the board shows it. */
+  endWalkthrough(): void;
   requestFormat(): void;
   setFormatOnSave(on: boolean): void;
   showFormatResult(result: FormatResult): void;
@@ -271,6 +287,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   viewStyle: saved.viewStyle === 'technical' || saved.viewStyle === 'both' ? saved.viewStyle : 'illustrated',
   boardZoom: 1,
   bindings: saved.bindings ?? {},
+  walkthrough: null,
 
   selectProblem(id) {
     const s = get();
@@ -283,6 +300,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
       selectedNode: null,
       tab: defaultTab(p),
       live: { result: null, code: null, lastDrawn: null },
+      walkthrough: null,
     });
   },
 
@@ -305,6 +323,8 @@ export const useStore = create<State & Actions>()((set, get) => ({
     const s = get();
     const p = problemFor(s.problemId, s.custom);
     set({ work: { ...s.work, [s.problemId]: caseWork(p, index, currentWork(s).code) } });
+    // Auto-run waits during a walkthrough, so the answer is replayed on the new case from its first step.
+    if (s.walkthrough?.problemId === s.problemId) void get().startRun();
   },
 
   setInput(name, text) {
@@ -360,6 +380,8 @@ export const useStore = create<State & Actions>()((set, get) => ({
     const show = quiet ? {} : { tab: 'run' as const };
     const p = problemFor(s.problemId, s.custom);
     const w = currentWork(s);
+    const code = shownCode(s);
+    const walking = s.walkthrough?.problemId === s.problemId;
     const bad = w.inputs.find((r) => !parseValue(r.text).ok);
     if (p.mode === 'function' && bad) {
       cancelObsoleteRun();
@@ -368,7 +390,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
           ...s.run,
           status: 'failed',
           result: null,
-          codeAtRun: w.code,
+          codeAtRun: code,
           problemId: p.id,
           inspectFailed: false,
           auto: !!opts.auto,
@@ -381,7 +403,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
     }
     const expect = expectFrom(p, w.expectedText);
     const request: RunRequest = {
-      code: w.code,
+      code,
       mode: p.mode,
       entry: p.entry,
       resultKind: p.resultKind,
@@ -398,12 +420,12 @@ export const useStore = create<State & Actions>()((set, get) => ({
         run: {
           status: 'done',
           result,
-          codeAtRun: w.code,
+          codeAtRun: code,
           problemId: p.id,
           expect,
           message: null,
-          // Only a run that finished becomes the new drawing to fall back on.
-          lastGood: ok ? { result, codeAtRun: w.code, problemId: p.id, expect } : lastGood,
+          // Only a run of the learner's own code that finished becomes the drawing to fall back on (never a walkthrough).
+          lastGood: ok && !walking ? { result, codeAtRun: code, problemId: p.id, expect } : lastGood,
           inspectFailed: false,
           auto: !!opts.auto,
         },
@@ -418,7 +440,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
       const message = e instanceof EngineStopped ? e.message : `The engine failed: ${String(e)}`;
       const status = e instanceof EngineStopped && e.reason === 'stopped' ? 'stopped' : 'failed';
       set({
-        run: { ...get().run, status, message, result: null, codeAtRun: w.code, problemId: p.id, inspectFailed: false },
+        run: { ...get().run, status, message, result: null, codeAtRun: code, problemId: p.id, inspectFailed: false },
         step: 0,
         playing: false,
       });
@@ -496,6 +518,20 @@ export const useStore = create<State & Actions>()((set, get) => ({
     });
   },
 
+  startWalkthrough(w) {
+    const s = get();
+    s.cancelRun();
+    set({ walkthrough: { ...w, problemId: s.problemId }, tab: 'run', mobilePane: 'visual', playing: false, selectedNode: null });
+    void get().startRun();
+  },
+
+  endWalkthrough() {
+    if (!get().walkthrough) return;
+    get().cancelRun();
+    set({ walkthrough: null, playing: false, selectedNode: null });
+    void get().startRun({ background: true });
+  },
+
   setInspectFailed(inspect) {
     set({ run: { ...get().run, inspectFailed: inspect }, step: 0, playing: false, selectedNode: null });
   },
@@ -544,6 +580,11 @@ export const useStore = create<State & Actions>()((set, get) => ({
 
 export function currentWork(s: Pick<State, 'problemId' | 'work' | 'custom'>): Work {
   return s.work[s.problemId] ?? freshWork(problemFor(s.problemId, s.custom));
+}
+
+/** The code the editor panel shows and Run runs: a walkthrough's answer while one is open, otherwise the learner's own. */
+export function shownCode(s: Pick<State, 'problemId' | 'work' | 'custom' | 'walkthrough'>): string {
+  return s.walkthrough?.problemId === s.problemId ? s.walkthrough.code : currentWork(s).code;
 }
 
 export function expectFrom(p: ProblemDef, text: string): ExpectSpec {

@@ -134,13 +134,44 @@ export interface StaticHints {
   deques?: string[];
   /** arrays whose items are used as indexes into other arrays: `nums[dq[0]]` gives dq → [nums] */
   indexInto?: Record<string, string[]>;
+  /** structures recognized by what the code does with them, whatever they are named */
+  usage?: UsageHints;
   /** top-level functions */
   functions: FunctionInfo[];
 }
 
+/** Variable names grouped by how the code uses them (see collectUsage in engine/hints.ts). */
+export interface UsageHints {
+  /** arrays indexed with binary-heap slot arithmetic: 2 * i + 1, 2 * i + 2, (i - 1) >> 1 */
+  heaps: string[];
+  /** arrays followed to a slot that is its own parent: x = p[x], while (p[x] !== x), find(p[x]) */
+  parents: string[];
+  /** arrays, Maps or objects whose entry lists are walked as neighbors used as keys: for (const v of adj[u]) seen.has(v) */
+  adjacency: string[];
+  /** arrays of pairs taken apart into two keys: for (const [a, b] of edges) adj[a].push(b) */
+  edgeLists: string[];
+  /** the code walks down nested objects by key: node = node[ch], node = node.children.get(ch) */
+  trieWalk: boolean;
+  /** variables that step along a field of their own: cur = cur.next, node = node.left */
+  walkers: string[];
+  /** numbers combined bit by bit: operands of &, |, ^ and ~, and targets of &=, |=, ^= (shifts alone are halving, not bits) */
+  bits: string[];
+  /** variables that hold a vertex there: u and v in for (const v of adj[u]), a and b in for (const [a, b] of edges) */
+  vertices: string[];
+  /** per-vertex structures, read from how the code writes them for a vertex */
+  visited: string[];
+  distances: string[];
+  predecessors: string[];
+}
+
 export type ExpectSpec = { kind: 'none' } | { kind: 'return'; value: unknown } | { kind: 'variables'; values: Record<string, unknown> };
 
-export type InputKind = 'auto' | 'tree' | 'list';
+/**
+ * `pos` is the cycle convention for linked lists: the last node of the linked-list input
+ * links back to the node at this index (-1: no cycle). It builds the list and is not
+ * passed to the function.
+ */
+export type InputKind = 'auto' | 'tree' | 'list' | 'pos';
 
 export interface InputSpec {
   name: string;

@@ -33,6 +33,18 @@ The number of nodes is in the range [0, 500].`;
     expect(parseProblemText(text).kinds).toEqual({ head: 'list', k: 'auto' });
   });
 
+  it('reads pos next to a linked list as the cycle position', () => {
+    const cycle = parseProblemText(`Linked List Cycle
+Given head, the head of a linked list, determine if the linked list has a cycle in it.
+
+Example 1:
+Input: head = [3,2,0,-4], pos = 1
+Output: true`);
+    expect(cycle.kinds).toEqual({ head: 'list', pos: 'pos' });
+    // Without a linked list in the text, pos is an ordinary value.
+    expect(parseProblemText('Example 1:\nInput: nums = [1,2], pos = 1\nOutput: 2').kinds).toEqual({ nums: 'auto', pos: 'auto' });
+  });
+
   it('splits inputs with commas inside strings and brackets', () => {
     expect(splitAssignments('s = "a, b", grid = [[1,2],[3,4]], k = 1')).toEqual([
       { name: 's', raw: '"a, b"' },

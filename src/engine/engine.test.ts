@@ -296,6 +296,50 @@ describe('trees: recursion and traversal', () => {
     expect(runProblem('reverse-list', { head: [] }).plainResult).toEqual([]);
   });
 
+  it('builds a cycle from a pos input and does not pass pos to the function', () => {
+    // Walks at most 10 nodes and reports the values and how many parameters it got.
+    const code =
+      'function walk(...args) {\n  const seen = [];\n  for (let cur = args[0], k = 0; cur && k < 10; cur = cur.next, k++) seen.push(cur.val);\n  return [args.length, seen];\n}\n';
+    const inputs = (pos: number) => [
+      { name: 'head', value: [3, 2, 0, -4], kind: 'list' as const },
+      { name: 'pos', value: pos, kind: 'pos' as const },
+    ];
+    const cyclic = runProgram({ code, mode: 'function', entry: 'walk', inputs: inputs(1) });
+    expect(cyclic.status, cyclic.error?.message).toBe('finished');
+    expect(cyclic.plainResult).toEqual([1, [3, 2, 0, -4, 2, 0, -4, 2, 0, -4]]);
+    expect(cyclic.notes).toEqual([]);
+    const selfLoop = runProgram({ code, mode: 'function', entry: 'walk', inputs: inputs(3) });
+    expect(selfLoop.plainResult).toEqual([1, [3, 2, 0, -4, -4, -4, -4, -4, -4, -4]]);
+    const none = runProgram({ code, mode: 'function', entry: 'walk', inputs: inputs(-1) });
+    expect(none.plainResult).toEqual([1, [3, 2, 0, -4]]);
+  });
+
+  it('reports a pos input that cannot link the list instead of guessing', () => {
+    const code = 'function walk(head) { return head; }';
+    const outside = runProgram({
+      code,
+      mode: 'function',
+      entry: 'walk',
+      inputs: [
+        { name: 'head', value: [1, 2], kind: 'list' },
+        { name: 'pos', value: 2, kind: 'pos' },
+      ],
+    });
+    expect(outside.status).toBe('error');
+    expect(outside.error?.message).toContain('must be -1 (no cycle) or a node position from 0 to 1');
+    const noList = runProgram({
+      code,
+      mode: 'function',
+      entry: 'walk',
+      inputs: [
+        { name: 'head', value: [1, 2], kind: 'auto' },
+        { name: 'pos', value: 0, kind: 'pos' },
+      ],
+    });
+    expect(noList.status).toBe('error');
+    expect(noList.error?.message).toContain('no input is drawn as a linked list');
+  });
+
   it('labels duplicate node values so they can be told apart', () => {
     const run = runProgram({ code: 'const a = new TreeNode(3);\nconst b = new TreeNode(3);\na.left = b;\n', mode: 'script', inputs: [] });
     const connect = run.steps.find((s) => s.loc?.line === 3)!;

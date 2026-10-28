@@ -16,8 +16,10 @@ const R = NODE / 2;
 const LEVEL = 100;
 const UNIT = 60;
 const TOP = 58;
-/** Room under the bottom row for the "root" and size labels. */
+/** Room under the bottom row for an "in a loop" label. */
 const BOTTOM = 40;
+/** One line of the labels above a root ("root", then "size 2", "rank 1"). */
+const NOTE_LINE = 13;
 const PAD_X = 28;
 
 export interface ForestViewProps {
@@ -41,7 +43,10 @@ export function ForestView(props: ForestViewProps) {
   const n = parent.length;
   const forest = buildForest(parent);
   const rawX = (i: number) => forest.spots.get(i)!.x * UNIT;
-  const yOf = (i: number) => TOP + forest.spots.get(i)!.depth * LEVEL + R;
+  // A root's labels sit above it, where no arrow arrives; its variable labels go above those.
+  const noteHeight = (1 + annotations.length) * NOTE_LINE + 6;
+  const top = TOP + noteHeight;
+  const yOf = (i: number) => top + forest.spots.get(i)!.depth * LEVEL + R;
   const roots = new Set(forest.roots);
 
   const tagsAt = new Map<number, { name: string; active: boolean }[]>();
@@ -65,7 +70,7 @@ export function ForestView(props: ForestViewProps) {
   const shift = PAD_X - minX;
   const xOf = (i: number) => rawX(i) + shift;
   const width = maxX - minX + 2 * PAD_X;
-  const height = TOP + forest.depth * LEVEL + NODE + BOTTOM;
+  const height = top + forest.depth * LEVEL + NODE + BOTTOM;
 
   const writeNotes = effects
     .filter((e): e is Extract<Effect, { type: 'index-write' }> => e.type === 'index-write' && e.objId === arr.id)
@@ -146,7 +151,24 @@ export function ForestView(props: ForestViewProps) {
               animate={{ x: xOf(i) - R, y: yOf(i) - R }}
               transition={glide}
             >
-              {tags.length > 0 && <TagGroup tags={tags} spot={spots.get(i) ?? { side: 'center', row: 0 }} />}
+              {tags.length > 0 && (
+                <div className="absolute inset-0" style={isRoot ? { transform: `translateY(${-noteHeight}px)` } : undefined}>
+                  <TagGroup tags={tags} spot={spots.get(i) ?? { side: 'center', row: 0 }} />
+                </div>
+              )}
+              {isRoot && (
+                <div
+                  className="absolute bottom-full left-1/2 mb-1.5 flex -translate-x-1/2 flex-col items-center whitespace-nowrap text-[10.5px] font-semibold"
+                  style={{ lineHeight: `${NOTE_LINE}px` }}
+                >
+                  <span className="text-navy-300">root</span>
+                  {notes.map((a) => (
+                    <span key={a.name} className="text-navy-400">
+                      {a.name} <ValueText v={a.values[i]} heap={heap} compact />
+                    </span>
+                  ))}
+                </div>
+              )}
               <div
                 title={`slot ${i}: parent[${i}] = ${p}${isRoot ? ' (a root: its own parent)' : ''}`}
                 className={`flex size-full items-center justify-center rounded-full text-[15px] font-bold text-navy-100 transition-shadow duration-300 ${style.fill} ${style.ring} ${
@@ -155,15 +177,10 @@ export function ForestView(props: ForestViewProps) {
               >
                 {i}
               </div>
-              {(isRoot || forest.looped.includes(i)) && (
-                <div className="absolute left-1/2 top-full mt-1.5 flex -translate-x-1/2 flex-col items-center whitespace-nowrap text-[10.5px] font-semibold leading-tight">
-                  {isRoot ? <span className="text-navy-300">root</span> : <span className="text-rose-300">in a loop</span>}
-                  {notes.map((a) => (
-                    <span key={a.name} className="text-navy-400">
-                      {a.name} <ValueText v={a.values[i]} heap={heap} compact />
-                    </span>
-                  ))}
-                </div>
+              {forest.looped.includes(i) && (
+                <span className="absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap text-[10.5px] font-semibold text-rose-300">
+                  in a loop
+                </span>
               )}
             </motion.div>
           );

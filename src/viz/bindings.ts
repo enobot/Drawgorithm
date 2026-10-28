@@ -128,7 +128,6 @@ function detectShape(
 ): Omit<ShapeBinding, 'fields'> | { ambiguous: string } {
   const fields = [...new Set(objs.flatMap((o) => o.entries.map(([k]) => k)))];
   const has = (f: string) => fields.includes(f);
-  const valueField = VALUE_NAMES.find(has) ?? null;
   // Fields that point at another object of the same class.
   const selfRefs = fields.filter((f) =>
     objs.some((o) => {
@@ -136,6 +135,19 @@ function detectShape(
       return v?.t === 'ref' && heap[v.id] && classOf(heap[v.id]) === className;
     }),
   );
+  // A usual value name, or else the one field that only ever holds plain values (num, amount, ...),
+  // when the class also links to itself.
+  const plainFields = fields.filter((f) =>
+    objs.every((o) => {
+      const v = o.entries.find(([k]) => k === f)?.[1];
+      return !v || (v.t !== 'ref' && v.t !== 'function');
+    }),
+  );
+  const valueField =
+    VALUE_NAMES.find(has) ??
+    (selfRefs.length > 0 && plainFields.filter((f) => !selfRefs.includes(f)).length === 1
+      ? plainFields.find((f) => !selfRefs.includes(f))!
+      : null);
   const sides = TREE_SIDES.find(([a, b]) => has(a) && has(b));
   const next = NEXT_NAMES.find(has);
   if (valueField && sides) {
@@ -178,19 +190,31 @@ const VERTEX_COUNT_NAMES = ['n', 'N', 'V', 'numVertices', 'vertexCount', 'numNod
 
 const SOURCE_RANK: Record<BindingSource, number> = { user: 2, code: 1, convention: 0 };
 
-/** How an array is drawn unless the user chooses: what the code does with it first, then what it is named. */
+/**
+ * How an array is drawn unless the user chooses: what the code does with it first, then what it
+ * is named. A usual name (heap, parent, graph, edges) is read the same way as before; any other
+ * name gets the same drawing when the code uses the array that way (UsageHints).
+ */
 function detectArrayRole(
   name: string,
   arr: Extract<HeapSnap, { kind: 'array' }>,
   heap: Heap,
   hints: StaticHints,
 ): { role: ArrayRole; source: BindingSource; reason: string } {
-  // A heap is pushed and popped like a stack; its name says it is a heap.
+  const usage = hints.usage;
+  // A heap is pushed and popped like a stack; its name or its slot arithmetic says it is a heap.
   if (HEAP_NAME.test(name)) {
     return {
       role: 'heap',
       source: 'convention',
       reason: `named ${name}; drawn as a complete binary tree where the children of slot i are slots 2i+1 and 2i+2`,
+    };
+  }
+  if (usage?.heaps.includes(name)) {
+    return {
+      role: 'heap',
+      source: 'code',
+      reason: `the code reaches its slots with 2·i+1, 2·i+2 or (i−1)/2; drawn as a complete binary tree where the children of slot i are slots 2i+1 and 2i+2`,
     };
   }
   if (hints.deques?.includes(name)) {
@@ -205,11 +229,32 @@ function detectArrayRole(
       reason: `named ${name}, and every item is a slot of the same array: drawn as parent links`,
     };
   }
+  if (usage?.parents.includes(name) && isParentArray(arr)) {
+    return {
+      role: 'union-find',
+      source: 'code',
+      reason: `the code follows ${name}[x] up to a slot that is its own parent, and every item is a slot of the same array: drawn as parent links`,
+    };
+  }
   if (ADJACENCY_NAMES.includes(name) && readGraph(arr, heap, 'adjacency')) {
     return { role: 'graph', source: 'convention', reason: `named ${name}, and every item is a list of vertex numbers` };
   }
+  if (usage?.adjacency.includes(name) && readGraph(arr, heap, 'adjacency')) {
+    return {
+      role: 'graph',
+      source: 'code',
+      reason: `the code walks ${name}[u] as the neighbors of u, and every item is a list of vertex numbers`,
+    };
+  }
   if (EDGE_LIST_NAMES.includes(name) && arr.items.length > 0 && readGraph(arr, heap, 'edge-list')) {
     return { role: 'edge-list', source: 'convention', reason: `named ${name}, and every item is a pair of vertices` };
+  }
+  if (usage?.edgeLists.includes(name) && arr.items.length > 0 && readGraph(arr, heap, 'edge-list')) {
+    return {
+      role: 'edge-list',
+      source: 'code',
+      reason: `the code takes each item apart into two vertices, and every item is a pair of vertices`,
+    };
   }
   if (DEQUE_NAMES.includes(name)) return { role: 'deque', source: 'convention', reason: `named ${name}` };
   return { role: 'cells', source: 'convention', reason: 'plain array' };
@@ -330,11 +375,19 @@ export function resolveBindings(
       } else if (fits.includes('graph') && ADJACENCY_NAMES.includes(v.name)) {
         role = 'graph';
         reason = `named ${v.name}, and every key lists neighbors`;
+      } else if (fits.includes('graph') && hints.usage?.adjacency.includes(v.name)) {
+        role = 'graph';
+        source = 'code';
+        reason = `the code walks the list under each key as its neighbors`;
       } else if (fits.includes('trie') && trieNamed) {
         role = 'trie';
         reason = trieClass
           ? `a ${h.className} whose nodes branch on single letters`
           : `named ${v.name}, and its nodes branch on single letters`;
+      } else if (fits.includes('trie') && hints.usage?.trieWalk) {
+        role = 'trie';
+        source = 'code';
+        reason = 'the code walks down it one key at a time, and its nodes branch on single letters';
       }
       if (!fits.length && !user) continue;
       if (v.name !== 'this') objects.push({ name: v.name, role, source, reason, fits });
@@ -351,6 +404,25 @@ export function resolveBindings(
     if (!c.model && c.source !== 'user') continue;
     const inside = tries.some((o) => o.model && o.root !== c.root && o.model.nodes.has(c.root));
     if (!inside) claim(c.root, c.name, { role: 'trie', source: c.source, reason: c.reason, trieRoot: c.root });
+  }
+  // Objects drawn as a trie (its nodes and their children objects) link to each other on purpose:
+  // they don't make their class ambiguous. The class is judged again without them.
+  const trieParts = new Set<number>();
+  for (const c of tries) {
+    if (!c.model || roles.get(c.root)?.role !== 'trie') continue;
+    for (const n of c.model.nodes.values()) trieParts.add(n.id).add(n.containerId);
+  }
+  for (let k = ambiguous.length - 1; k >= 0 && trieParts.size; k--) {
+    const all = groups.get(ambiguous[k].className) ?? [];
+    const rest = all.filter((o) => !trieParts.has(o.id));
+    if (rest.length === all.length) continue;
+    const d = rest.length ? detectShape(ambiguous[k].className, rest, heap) : null;
+    if (d && 'ambiguous' in d) continue;
+    if (d) {
+      shapes.push({ ...d, fields: ambiguous[k].fields });
+      byClass.set(ambiguous[k].className, d.shape);
+    }
+    ambiguous.splice(k, 1);
   }
 
   const effective: StaticHints = {

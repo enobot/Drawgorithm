@@ -2,7 +2,8 @@
 // them with the same renderers as a run. This only draws the inputs; it runs no code.
 import type { Heap, InputKind, ValueSnap } from '../trace/types';
 
-export function previewHeap(value: unknown, kind: InputKind): { heap: Heap; root: ValueSnap } {
+/** `pos` links a linked list's last node back to the node at that index (-1: no cycle). */
+export function previewHeap(value: unknown, kind: InputKind, pos = -1): { heap: Heap; root: ValueSnap } {
   const heap: Heap = {};
   let next = 1;
   const prim = (v: unknown): ValueSnap => {
@@ -58,6 +59,7 @@ export function previewHeap(value: unknown, kind: InputKind): { heap: Heap; root
   }
   if (kind === 'list' && Array.isArray(value)) {
     let nextRef: ValueSnap = { t: 'null' };
+    const ids: number[] = [];
     for (let k = value.length - 1; k >= 0; k--) {
       const id = next++;
       heap[id] = {
@@ -69,8 +71,11 @@ export function previewHeap(value: unknown, kind: InputKind): { heap: Heap; root
           ['next', nextRef],
         ],
       };
+      ids.unshift(id);
       nextRef = { t: 'ref', id };
     }
+    const last = heap[ids[ids.length - 1]];
+    if (pos >= 0 && pos < ids.length && last?.kind === 'object') last.entries[1] = ['next', { t: 'ref', id: ids[pos] }];
     return { heap, root: nextRef };
   }
   return { heap, root: plain(value) };

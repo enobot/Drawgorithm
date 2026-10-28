@@ -501,6 +501,10 @@ export function graphOverlay(model: GraphModel, frames: FrameSnap[], heap: Heap,
   const vars = allVars(frames);
   const overlay: GraphOverlay = { visited: new Map(), frontier: new Map(), values: [], prev: [], tags: new Map(), sources: new Map() };
   const frontierNames = new Set([...hints.queues, ...hints.stacks, ...(hints.deques ?? []), ...FRONTIER_NAMES]);
+  // Usual names, or any name the code writes per vertex in that way (UsageHints).
+  const visitedNames = [...VISITED_NAMES, ...(hints.usage?.visited ?? [])];
+  const distNames = [...DIST_NAMES, ...(hints.usage?.distances ?? [])];
+  const prevNames = [...PREV_NAMES, ...(hints.usage?.predecessors ?? [])];
   const seenIds = new Set<number>();
   for (const v of vars) {
     const id = ref(v.value);
@@ -509,7 +513,7 @@ export function graphOverlay(model: GraphModel, frames: FrameSnap[], heap: Heap,
     if (!h) continue;
     // One structure under several names (or in several calls) is read once, by its first name.
     if (seenIds.has(id)) continue;
-    if (VISITED_NAMES.includes(v.name)) {
+    if (visitedNames.includes(v.name)) {
       seenIds.add(id);
       overlay.sources.set(id, { kind: 'visited', name: v.name });
       if (h.kind === 'set') {
@@ -518,14 +522,14 @@ export function graphOverlay(model: GraphModel, frames: FrameSnap[], heap: Heap,
           if (k !== null && keys.has(k)) overlay.visited.set(k, v.name);
         }
       } else for (const [k, x] of perVertex(h, keys) ?? []) if (truthy(x)) overlay.visited.set(k, v.name);
-    } else if (DIST_NAMES.includes(v.name)) {
+    } else if (distNames.includes(v.name)) {
       const byNode = perVertex(h, keys);
       if (byNode) {
         seenIds.add(id);
         overlay.sources.set(id, { kind: 'value', name: v.name });
         overlay.values.push({ name: v.name, byNode });
       }
-    } else if (PREV_NAMES.includes(v.name)) {
+    } else if (prevNames.includes(v.name)) {
       const byNode = perVertex(h, keys);
       if (byNode) {
         seenIds.add(id);
@@ -547,8 +551,8 @@ export function graphOverlay(model: GraphModel, frames: FrameSnap[], heap: Heap,
     }
   }
   // Variables holding a vertex: usual vertex names, plus anything the code uses to index the graph or its state arrays.
-  const indexers = new Set<string>(NODE_VARS);
-  for (const n of [...ADJACENCY_NAMES, ...VISITED_NAMES, ...DIST_NAMES, ...PREV_NAMES])
+  const indexers = new Set<string>([...NODE_VARS, ...(hints.usage?.vertices ?? [])]);
+  for (const n of [...ADJACENCY_NAMES, ...(hints.usage?.adjacency ?? []), ...visitedNames, ...distNames, ...prevNames])
     for (const p of hints.pointers[n] ?? []) indexers.add(p.name);
   for (const v of vars) {
     if (!indexers.has(v.name) || (v.value.t !== 'number' && v.value.t !== 'string')) continue;
@@ -910,4 +914,119 @@ export function graphNodeOrder(steps: Step[], objId: number, as: 'adjacency' | '
   }
   byObj.set(key, order);
   return order;
+}
+
+// ---------------------------------------------------------------- call tree (recursion and backtracking)
+
+export interface CallNode {
+  /** Frame id of the call. */
+  id: number;
+  name: string;
+  /** The call as recorded when it started, e.g. `build(1, [2])`. */
+  label: string;
+  /** Its arguments alone: `1, [2]`. */
+  args: string;
+  /** The nearest call of a recursive function that led to this one. */
+  parent: number | null;
+  children: number[];
+  /** First and last step the call is on the stack. */
+  start: number;
+  end: number;
+  /** What it returned, and the step where it did. */
+  returned: ValueSnap | null;
+  returnedAt: number | null;
+  /** An earlier call of the same function with the same arguments (a repeated subproblem). */
+  repeatOf: number | null;
+}
+
+export interface CallTree {
+  /** Calls of recursive functions, in the order they started. */
+  nodes: Map<number, CallNode>;
+  roots: number[];
+  /** Functions that call themselves (directly, or through a helper or callback). */
+  recursive: string[];
+  /** Some call makes two or more recursive calls: a branching search, not a single chain. */
+  branching: boolean;
+}
+
+const callTrees = new WeakMap<Step[], CallTree>();
+
+/**
+ * The tree of recursive calls in a run, read from the recorded frames: each call's parent is
+ * the call it was made from. Calls of functions that never call themselves (helpers, the entry
+ * function) are left out, and their recursive calls hang from the nearest recursive caller.
+ */
+export function readCallTree(steps: Step[]): CallTree {
+  const hit = callTrees.get(steps);
+  if (hit) return hit;
+  const calls = new Map<
+    number,
+    {
+      name: string;
+      label: string;
+      caller: number | null;
+      start: number;
+      end: number;
+      returned: ValueSnap | null;
+      returnedAt: number | null;
+    }
+  >();
+  steps.forEach((s, i) => {
+    // frames[0] is the program itself.
+    for (let k = 1; k < s.frames.length; k++) {
+      const f = s.frames[k];
+      let c = calls.get(f.id);
+      if (!c) {
+        c = { name: f.name, label: f.label, caller: k > 1 ? s.frames[k - 1].id : null, start: i, end: i, returned: null, returnedAt: null };
+        calls.set(f.id, c);
+      }
+      c.end = i;
+      if (f.returning && c.returnedAt === null) {
+        c.returned = f.returning;
+        c.returnedAt = i;
+      }
+    }
+  });
+  const recursive = new Set<string>();
+  for (const c of calls.values()) {
+    // Frames only carry names, and every unnamed callback is "anonymous": two of them are not the same function.
+    if (c.name === 'anonymous') continue;
+    for (let up = c.caller; up !== null; up = calls.get(up)?.caller ?? null) {
+      if (calls.get(up)?.name === c.name) {
+        recursive.add(c.name);
+        break;
+      }
+    }
+  }
+  const nodes = new Map<number, CallNode>();
+  const roots: number[] = [];
+  const firstWith = new Map<string, number>();
+  for (const [id, c] of calls) {
+    if (!recursive.has(c.name)) continue;
+    let parent = c.caller;
+    while (parent !== null && !recursive.has(calls.get(parent)!.name)) parent = calls.get(parent)!.caller;
+    const prefix = `${c.name}(`;
+    const args = c.label.startsWith(prefix) && c.label.endsWith(')') ? c.label.slice(prefix.length, -1) : c.label;
+    const key = `${c.name}\u0000${args}`;
+    const repeatOf = firstWith.get(key) ?? null;
+    if (repeatOf === null) firstWith.set(key, id);
+    nodes.set(id, {
+      id,
+      name: c.name,
+      label: c.label,
+      args,
+      parent,
+      children: [],
+      start: c.start,
+      end: c.end,
+      returned: c.returned,
+      returnedAt: c.returnedAt,
+      repeatOf,
+    });
+    if (parent === null) roots.push(id);
+    else nodes.get(parent)?.children.push(id);
+  }
+  const tree: CallTree = { nodes, roots, recursive: [...recursive], branching: [...nodes.values()].some((n) => n.children.length >= 2) };
+  callTrees.set(steps, tree);
+  return tree;
 }

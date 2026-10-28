@@ -392,15 +392,18 @@ export function nodeLabels(
 
 const CURRENT_NAMES = ['node', 'curr', 'current', 'cur', 'n', 'temp', 'p'];
 
-/** The node the active frame is working on, if any. */
-export function currentNode(step: Step, shapeOf: ShapeOf = conventionShape): number | null {
+/**
+ * The node the active frame is working on, if any: a usual name (node, cur, ...), then a
+ * variable the code steps along its own fields (`walkers`: p = p.next), then a parameter.
+ */
+export function currentNode(step: Step, shapeOf: ShapeOf = conventionShape, walkers: string[] = []): number | null {
   const frame = step.frames[step.frames.length - 1];
   if (!frame) return null;
   const isNode = (v: ValueSnap) => {
     const id = refId(v);
     return id !== null && shapeOf(step.heap[id]) ? id : null;
   };
-  for (const name of CURRENT_NAMES) {
+  for (const name of [...CURRENT_NAMES, ...walkers]) {
     const v = frame.vars.find((x) => x.name === name);
     if (v) {
       const id = isNode(v.value);
@@ -423,12 +426,12 @@ export interface TraversalIndex {
   returns: { step: number; node: number; value: string }[];
 }
 
-export function buildTraversalIndex(steps: Step[], shapeOf: ShapeOf = conventionShape): TraversalIndex {
+export function buildTraversalIndex(steps: Step[], shapeOf: ShapeOf = conventionShape, walkers: string[] = []): TraversalIndex {
   const current: (number | null)[] = [];
   const firstVisit = new Map<number, number>();
   const returns: TraversalIndex['returns'] = [];
   steps.forEach((s, i) => {
-    const c = s.kind === 'done' ? null : currentNode(s, shapeOf);
+    const c = s.kind === 'done' ? null : currentNode(s, shapeOf, walkers);
     current.push(c);
     if (c !== null && !firstVisit.has(c)) firstVisit.set(c, i);
     if (s.kind === 'return') {

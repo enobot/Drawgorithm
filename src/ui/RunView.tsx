@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { compareRun } from '../problems/compare';
-import { currentWork, displayedRun, problemFor, runFailed, useStore, type RunState } from '../state/store';
+import { displayedRun, problemFor, runFailed, shownCode, useStore, type RunState, type Walkthrough } from '../state/store';
 import type { EngineError, Step, StepKind } from '../trace/types';
 import { buildTraversalIndex, traversalAt } from '../viz/analysis';
 import { CallStack, IllustratedNote, ResultBanner, Structures, type BoardContext } from '../viz/Board';
+import { CallTreeSection } from '../viz/CallTreeView';
 import { focusOf } from '../viz/focus';
 import { listSlotsForSteps } from '../viz/listLayout';
 import { NO_OVERRIDES, resolveBindings } from '../viz/bindings';
@@ -37,7 +38,10 @@ const ERROR_TITLE: Record<EngineError['kind'], string> = {
   setup: 'Nothing to run yet',
 };
 
-function Explanation({ step }: { step: Step }) {
+/** During a walkthrough the code that runs is the authored answer: the engine's "your code" sentences say so. */
+const forAnswer = (text: string) => text.replace(/^Your code/, 'The answer').replace(/\byour code\b/g, 'the answer');
+
+function Explanation({ step, walking }: { step: Step; walking: boolean }) {
   const tone =
     step.kind === 'error'
       ? 'border-rose-400/60 bg-rose-400/10'
@@ -57,7 +61,9 @@ function Explanation({ step }: { step: Step }) {
           </span>
         )}
       </div>
-      <p className="text-[15px] leading-relaxed text-navy-100 max-sm:text-[14px] max-sm:leading-snug">{step.explanation}</p>
+      <p className="text-[15px] leading-relaxed text-navy-100 max-sm:text-[14px] max-sm:leading-snug">
+        {walking ? forAnswer(step.explanation) : step.explanation}
+      </p>
     </div>
   );
 }
@@ -114,6 +120,33 @@ function FailureBanner({ run, inspecting }: { run: RunState; inspecting: boolean
   );
 }
 
+/** Says the board is playing the authored answer, not the learner's code, with how the answer works. */
+function WalkthroughBanner({ walkthrough }: { walkthrough: Walkthrough }) {
+  const endWalkthrough = useStore((s) => s.endWalkthrough);
+  return (
+    <div role="status" className="mx-4 mt-3 rounded-xl border border-violet-300/50 bg-violet-400/10 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold text-violet-100">Walkthrough: the authored answer to {walkthrough.title}</p>
+        <button type="button" className="btn-outline h-7" onClick={endWalkthrough}>
+          Back to my code
+        </button>
+      </div>
+      <p className="mt-1 text-[13px] text-navy-200">
+        This drawing runs the reference solution, not your code; your code is kept as it was. Step through it, or pick another example to
+        replay it there.
+      </p>
+      <details className="mt-1.5 text-[13px] text-navy-200">
+        <summary className="cursor-pointer select-none font-semibold text-navy-100">How this answer works</summary>
+        <div className="mt-1.5 flex flex-col gap-1.5">
+          {walkthrough.explanation.map((p) => (
+            <p key={p}>{p}</p>
+          ))}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 export function RunView() {
   const run = useStore((s) => s.run);
   const problemId = useStore((s) => s.problemId);
@@ -121,7 +154,8 @@ export function RunView() {
   const selectedNode = useStore((s) => s.selectedNode);
   const selectNode = useStore((s) => s.selectNode);
   const custom = useStore((s) => s.custom);
-  const code = useStore((s) => currentWork(s).code);
+  const code = useStore(shownCode);
+  const walkthrough = useStore((s) => (s.walkthrough?.problemId === s.problemId ? s.walkthrough : null));
   const startRun = useStore((s) => s.startRun);
   const details = useStore((s) => s.showDetails);
   const illustrated = useStore((s) => s.viewStyle !== 'technical');
@@ -144,7 +178,10 @@ export function RunView() {
     const last = result.steps[result.steps.length - 1];
     return resolveBindings(last.heap, last.frames, result.hints, overrides).shapeOf;
   }, [result, overrides]);
-  const traversal = useMemo(() => (result && runShapeOf ? buildTraversalIndex(result.steps, runShapeOf) : null), [result, runShapeOf]);
+  const traversal = useMemo(
+    () => (result && runShapeOf ? buildTraversalIndex(result.steps, runShapeOf, result.hints.usage?.walkers) : null),
+    [result, runShapeOf],
+  );
   // List nodes keep one place for the whole run, so re-pointing `next` moves arrows, not boxes.
   const listPlaces = useMemo(() => (result && runShapeOf ? listSlotsForSteps(result.steps, runShapeOf) : undefined), [result, runShapeOf]);
   const focus = useMemo(() => focusOf(step ?? null), [step]);
@@ -208,6 +245,7 @@ export function RunView() {
     // On short screens the board keeps a usable height and the whole view scrolls, with playback pinned below.
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       {failed && <FailureBanner run={run} inspecting={display!.kind === 'failed-steps'} />}
+      {walkthrough && <WalkthroughBanner walkthrough={walkthrough} />}
       {display!.kind === 'previous' && (
         <p className="mx-4 mt-3 rounded-lg border border-navy-500 bg-navy-850 px-3 py-2 text-[13px] text-navy-200">
           <strong className="text-navy-100">Previous valid state:</strong> your last run that finished
@@ -264,6 +302,7 @@ export function RunView() {
                 onClose={() => selectNode(null)}
               />
             )}
+            <CallTreeSection steps={result.steps} step={step} />
             <CallStack ctx={ctx} />
             {illustrated && <IllustratedNote />}
           </div>
@@ -272,7 +311,11 @@ export function RunView() {
           {/* The zoom controls sit just above the pinned bar, so they stay visible however the view is scrolled. */}
           {!sideBySide && <div ref={setZoomSlot} className="absolute bottom-full right-3 mb-3" />}
           {/* The result lives with the explanation, so reaching the end never pushes the drawing down. */}
-          {step.kind === 'done' ? <ResultBanner step={step} comparison={comparison} /> : <Explanation step={step} />}
+          {step.kind === 'done' ? (
+            <ResultBanner step={step} comparison={comparison} />
+          ) : (
+            <Explanation step={step} walking={!!walkthrough} />
+          )}
           <Playback total={result.steps.length} />
           <details className="group">
             <summary className="cursor-pointer select-none text-[13px] font-semibold text-navy-300 hover:text-navy-100">

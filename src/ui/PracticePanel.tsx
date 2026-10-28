@@ -104,6 +104,35 @@ function CheckTests({ exercise }: { exercise: Exercise }) {
   );
 }
 
+/** Plays the authored answer on the board, one step at a time, without touching the learner's code. */
+function WalkthroughButton({ exercise }: { exercise: Exercise }) {
+  const startWalkthrough = useStore((s) => s.startWalkthrough);
+  const endWalkthrough = useStore((s) => s.endWalkthrough);
+  const walking = useStore((s) => s.walkthrough?.problemId === exercise.id);
+  const s = exercise.content!.solution;
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="section-title">Stuck?</h3>
+      <p className="text-[12.5px] leading-snug text-navy-400">
+        Watch the authored answer run on the selected example, step by step, with the drawing. Your own code stays as it is.
+      </p>
+      {walking ? (
+        <button type="button" className="btn-outline self-start" onClick={endWalkthrough}>
+          Back to my code
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn-primary self-start"
+          onClick={() => startWalkthrough({ code: s.code, title: `${exercise.number}. ${exercise.title}`, explanation: s.explanation })}
+        >
+          Walk through the answer
+        </button>
+      )}
+    </section>
+  );
+}
+
 /** The authored reference, kept visibly separate from the learner's own code. */
 function Reference({ exercise }: { exercise: Exercise }) {
   const s = exercise.content!.solution;
@@ -114,7 +143,7 @@ function Reference({ exercise }: { exercise: Exercise }) {
       </summary>
       <div className="mt-2 flex flex-col gap-2 text-[13.5px] leading-snug text-navy-200">
         <p className="rounded-lg bg-amber-300/10 px-2.5 py-1.5 text-[12.5px] text-amber-100">
-          This is a worked reference written for this exercise. The drawing always shows the code in your editor, never this one.
+          This is a worked reference written for this exercise. The drawing shows your own code unless you choose Walk through the answer.
         </p>
         {s.explanation.map((p) => (
           <p key={p}>{p}</p>
@@ -152,6 +181,7 @@ export function PracticePanel({ exerciseId }: { exerciseId: string }) {
       </section>
       <Hints hints={c.hints} />
       <CheckTests exercise={exercise} />
+      <WalkthroughButton exercise={exercise} />
       <Reference exercise={exercise} />
       <section className="flex flex-col gap-1.5 text-[13px] leading-snug text-navy-300">
         <h3 className="section-title">What the drawing shows</h3>

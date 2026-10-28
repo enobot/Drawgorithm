@@ -201,10 +201,18 @@ function TreeComponentView({ comp, available, props }: { comp: TreeComponent; av
     props;
   const markerId = useId().replace(/:/g, '');
   const glide = useGlide();
-  const { nodes, nullAt, width, height } = placeTree(comp, available);
+  const { nodes, nullAt, width, height: treeHeight } = placeTree(comp, available);
   const isWritten = (from: number, side: string) => written.some((w) => w.objId === from && w.key === side);
   const isHighlightedEdge = (from: number, side: string) => !!highlightedEdges?.some((w) => w.objId === from && w.key === side);
   const nulls = comp.nulls.filter((n) => details || n.parent === current);
+  // A "null" under a node on the deepest level sits below the tree's usual bottom: make room for it.
+  const height = Math.max(
+    treeHeight,
+    ...nulls.map((n) => {
+      const parent = nodes.get(n.parent);
+      return parent ? nullAt(parent, n.side, n.slotX).y + 12 : 0;
+    }),
+  );
   const tagSpots = placeTags(comp, nodes, labels);
 
   return (

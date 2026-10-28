@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { liveBuild, runProgram } from '../engine/run';
 import { AUTHORED } from '../practice/exercises';
 import type { RunResult, Step } from '../trace/types';
+import { buildTraversalIndex } from './analysis';
+import { bitWidth } from './BitsView';
 import { NO_OVERRIDES, resolveBindings, type BindingOverrides } from './bindings';
 import {
   buildForest,
@@ -15,6 +17,7 @@ import {
   naryLayout,
   overlayChanges,
   readGraph,
+  readCallTree,
   readTrie,
   trieActivity,
   trieTags,
@@ -120,6 +123,21 @@ describe('which variables get which drawing', () => {
     expect(tries[0][0]).toBe(idOf(step, 'root'));
   });
 
+  it('does not ask how to draw plain objects that are the nodes of a drawn trie', () => {
+    const run = runEntry(reference('f75-66'), 'runDictionary', {
+      ops: [
+        ['add', 'car'],
+        ['add', 'cat'],
+      ],
+    });
+    const b = bindingsAt(run, last(run));
+    expect([...b.roles.values()].map((r) => r.role)).toEqual(['trie']);
+    expect(b.ambiguous).toEqual([]);
+    // Other plain objects that link to each other in two ways are still asked about.
+    const { b: other } = live('const a = { x: null, y: null };\nconst c = { x: a, y: a };\n');
+    expect(other.ambiguous.map((x) => x.className)).toEqual(['(object)']);
+  });
+
   it('draws a Trie class through its root field', () => {
     const code = [
       'class TrieNode { constructor() { this.children = new Map(); this.isEnd = false; } }',
@@ -143,6 +161,165 @@ describe('which variables get which drawing', () => {
     const { b } = live('const links = new Map([["a", ["b"]], ["b", ["a"]]]);\n');
     expect(b.objects).toEqual([expect.objectContaining({ name: 'links', role: 'plain', fits: ['graph'] })]);
     expect(b.roles.size).toBe(0);
+  });
+});
+
+describe('drawings follow what the code does, whatever the names', () => {
+  it('draws an array as a heap from its slot arithmetic', () => {
+    const code = [
+      'function f() {',
+      '  const pq = [];',
+      '  const add = (x) => {',
+      '    pq.push(x);',
+      '    let i = pq.length - 1;',
+      '    while (i > 0) {',
+      '      const up = (i - 1) >> 1;',
+      '      if (pq[up] <= pq[i]) break;',
+      '      [pq[up], pq[i]] = [pq[i], pq[up]];',
+      '      i = up;',
+      '    }',
+      '  };',
+      '  add(5); add(3); add(8);',
+      '  return pq;',
+      '}',
+    ].join('\n');
+    const run = runEntry(code, 'f', {});
+    expect(run.hints.usage?.heaps).toEqual(['pq']);
+    const step = last(run);
+    expect(bindingsAt(run, step).roles.get(idOf(step, 'pq'))).toMatchObject({ role: 'heap', source: 'code' });
+    // A plain array pushed and popped is still a stack.
+    expect(live('const pq = [1, 4, 2];\npq.pop();\n').b.roles.size).toBe(0);
+  });
+
+  it('draws an array as union-find when the code climbs it to a root', () => {
+    const run = runEntry('function f() { const up = [0, 0, 1, 3]; let x = 2; while (up[x] !== x) x = up[x]; return x; }', 'f', {});
+    expect(run.hints.usage?.parents).toEqual(['up']);
+    const step = last(run);
+    expect(bindingsAt(run, step).roles.get(idOf(step, 'up'))).toMatchObject({ role: 'union-find', source: 'code' });
+    // Recursion up the links: find(p[x]) inside find(x).
+    const rec = runEntry(
+      'function find(x) { return boss2[x] === x ? x : find(boss2[x]); }\nconst boss2 = [0, 0, 1];\nfunction f() { return find(2); }',
+      'f',
+      {},
+    );
+    expect(rec.hints.usage?.parents).toEqual(['boss2']);
+  });
+
+  it('reads a graph, its visited marks, distances and predecessors from a breadth-first search', () => {
+    const code = [
+      'function f() {',
+      '  const nb = [[1, 2], [0, 3], [0], [1]];',
+      '  const mark = [true, false, false, false];',
+      '  const far = [0, Infinity, Infinity, Infinity];',
+      '  const back = [-1, -1, -1, -1];',
+      '  const line = [0];',
+      '  while (line.length) {',
+      '    const at = line.shift();',
+      '    for (const x of nb[at]) {',
+      '      if (mark[x]) continue;',
+      '      mark[x] = true;',
+      '      far[x] = far[at] + 1;',
+      '      back[x] = at;',
+      '      line.push(x);',
+      '    }',
+      '  }',
+      '  return far;',
+      '}',
+    ].join('\n');
+    const run = runEntry(code, 'f', {});
+    expect(run.hints.usage).toMatchObject({ adjacency: ['nb'], visited: ['mark'], distances: ['far'], predecessors: ['back'] });
+    const step = last(run);
+    const b = bindingsAt(run, step);
+    expect(b.roles.get(idOf(step, 'nb'))).toMatchObject({ role: 'graph', source: 'code' });
+    const model = readGraph(step.heap[idOf(step, 'nb')], step.heap, 'adjacency')!;
+    const o = graphOverlay(model, step.frames, step.heap, run.hints, new Set(b.roles.keys()));
+    expect([...o.visited.keys()].sort()).toEqual(['0', '1', '2', '3']);
+    expect(o.values.map((v) => v.name)).toEqual(['far']);
+    expect(o.values[0].byNode.get('3')).toEqual({ t: 'number', v: 2 });
+    expect([...o.prev[0].links].sort()).toEqual([
+      ['1', '0'],
+      ['2', '0'],
+      ['3', '1'],
+    ]);
+    // The loop variables hold vertices, whatever they are called.
+    const mid = run.steps.find((s) => s.frames.at(-1)!.vars.some((v) => v.name === 'x' && v.value.t === 'number'))!;
+    const mo = graphOverlay(model, mid.frames, mid.heap, run.hints, new Set(b.roles.keys()));
+    expect([...mo.tags.values()].flat().map((t) => t.name)).toEqual(expect.arrayContaining(['x', 'at']));
+  });
+
+  it('reads pairs taken apart into two vertices as an edge list, but not intervals', () => {
+    const edges = runEntry(
+      'function f(E) { const out = [[], [], []]; for (const [a, b] of E) { out[a].push(b); out[b].push(a); } return out; }',
+      'f',
+      {
+        E: [
+          [0, 1],
+          [1, 2],
+        ],
+      },
+    );
+    expect(edges.hints.usage?.edgeLists).toEqual(['E']);
+    const step = last(edges);
+    expect(bindingsAt(edges, step).roles.get(idOf(step, 'E'))).toMatchObject({ role: 'edge-list', source: 'code' });
+    const merge = runEntry(
+      'function f(spans) { const out = []; for (const [s, e] of spans) { if (out.length && s <= out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], e); else out.push([s, e]); } return out; }',
+      'f',
+      {
+        spans: [
+          [1, 3],
+          [2, 4],
+        ],
+      },
+    );
+    expect(merge.hints.usage?.edgeLists).toEqual([]);
+    expect(bindingsAt(merge, last(merge)).roles.size).toBe(0);
+  });
+
+  it('draws nested objects as a trie when the code walks down them by letter', () => {
+    const code =
+      'function f(words) { const top = {}; for (const w of words) { let at = top; for (const ch of w) { if (!at[ch]) at[ch] = {}; at = at[ch]; } at.end = true; } return 0; }';
+    const run = runEntry(code, 'f', { words: ['to', 'tea'] });
+    expect(run.hints.usage?.trieWalk).toBe(true);
+    const step = last(run);
+    const tries = [...bindingsAt(run, step).roles.entries()].filter(([, r]) => r.role === 'trie');
+    expect(tries).toEqual([[idOf(step, 'top'), expect.objectContaining({ source: 'code', names: ['top'] })]]);
+    expect(readTrie(idOf(step, 'top'), step.heap)?.words.sort()).toEqual(['tea', 'to']);
+  });
+
+  it('reads a node class whose value field has its own name', () => {
+    const { b } = live(
+      'class Link { constructor(num) { this.num = num; this.after = null; } }\nconst a = new Link(1);\nconst c = new Link(2);\na.after = c;\n',
+    );
+    expect(b.shapes.find((s) => s.className === 'Link')?.shape).toEqual({ kind: 'list', value: 'num', next: 'after' });
+  });
+
+  it('marks numbers combined bit by bit, not numbers that are only halved or truncated', () => {
+    const run = runEntry(
+      'function f(ids, n) { let acc = 0; for (const id of ids) acc ^= id; let m = n & 1; const mid = (0 + n) >> 1; const t = n / 3 | 0; return acc + m + mid + t + ~m; }',
+      'f',
+      { ids: [3, 5, 3], n: 9 },
+    );
+    expect(run.status).toBe('finished');
+    expect([...run.hints.usage!.bits].sort()).toEqual(['acc', 'id', 'm', 'n']);
+    // One width for the whole run: a multiple of 4 that fits every value, 32 once a value is negative.
+    expect(bitWidth(run.steps, ['acc', 'id'])).toBe(4);
+    const neg = runEntry('function f() { let x = 5; x ^= -1; return x; }', 'f', {});
+    expect(bitWidth(neg.steps, ['x'])).toBe(32);
+  });
+
+  it('follows a variable that steps along its own field as the current node', () => {
+    const code = 'function f(head) { let w = head; while (w.next) w = w.next; return w.val; }';
+    const run = runProgram({ code, mode: 'function', entry: 'f', inputs: [{ name: 'head', value: [1, 2, 3], kind: 'list' }] });
+    expect(run.hints.usage?.walkers).toEqual(['w']);
+    const index = buildTraversalIndex(run.steps, undefined, run.hints.usage?.walkers);
+    const k = run.steps.findIndex((s) => {
+      const vars = s.frames.at(-1)!.vars;
+      const w = vars.find((v) => v.name === 'w');
+      const head = vars.find((v) => v.name === 'head');
+      return w && head && JSON.stringify(w.value) !== JSON.stringify(head.value);
+    });
+    expect(k).toBeGreaterThan(0);
+    expect(index.current[k]).toBe(idOf(run.steps[k], 'w'));
   });
 });
 
@@ -392,6 +569,73 @@ describe('trie reading', () => {
     const { step } = live('const root = { children: { a: { children: {}, end: true } }, owner: "me" };\nconst dict = { a: 1, b: 2 };\n');
     expect(readTrie(idOf(step, 'root'), step.heap)).toBeNull();
     expect(readTrie(idOf(step, 'dict'), step.heap)).toBeNull();
+  });
+});
+
+describe('call tree', () => {
+  const subsets = [
+    'function subsets(nums) {',
+    '  const out = [];',
+    '  const build = (i, picked) => {',
+    '    if (i === nums.length) { out.push([...picked]); return; }',
+    '    picked.push(nums[i]);',
+    '    build(i + 1, picked);',
+    '    picked.pop();',
+    '    build(i + 1, picked);',
+    '  };',
+    '  build(0, []);',
+    '  return out;',
+    '}',
+  ].join('\n');
+
+  it('reads an include/exclude search as a tree of calls with the arguments each got', () => {
+    const run = runEntry(subsets, 'subsets', { nums: [1, 2, 3] });
+    expect(run.status).toBe('finished');
+    const tree = readCallTree(run.steps);
+    expect(tree.recursive).toEqual(['build']);
+    expect(tree.branching).toBe(true);
+    // The entry function is not recursive: the tree starts at the first build call.
+    expect(tree.roots).toHaveLength(1);
+    const root = tree.nodes.get(tree.roots[0])!;
+    expect(root.args).toBe('0, []');
+    expect(root.children.map((c) => tree.nodes.get(c)!.args)).toEqual(['1, [1]', '1, []']);
+    expect(tree.nodes.size).toBe(15);
+    const leaves = [...tree.nodes.values()].filter((n) => !n.children.length).map((n) => n.args);
+    expect(leaves).toEqual(['3, [1, 2, 3]', '3, [1, 2]', '3, [1, 3]', '3, [1]', '3, [2, 3]', '3, [2]', '3, [3]', '3, []']);
+    // Every call ends before its parent does, and starts after it.
+    for (const n of tree.nodes.values()) {
+      const p = n.parent === null ? null : tree.nodes.get(n.parent)!;
+      if (p) expect(p.start < n.start && n.end <= p.end).toBe(true);
+    }
+  });
+
+  it('marks repeated subproblems and keeps what each call returned', () => {
+    const run = runEntry('function ways(n) { if (n <= 1) return 1; return ways(n - 1) + ways(n - 2); }', 'ways', { n: 4 });
+    const tree = readCallTree(run.steps);
+    const byArgs = (a: string) => [...tree.nodes.values()].filter((n) => n.args === a);
+    expect(tree.nodes.size).toBe(9);
+    expect(byArgs('2')).toHaveLength(2);
+    expect(byArgs('2')[0].repeatOf).toBeNull();
+    expect(byArgs('2')[1].repeatOf).toBe(byArgs('2')[0].id);
+    expect(byArgs('4')[0].returned).toEqual({ t: 'number', v: 5 });
+    expect(byArgs('3')[0].returned).toEqual({ t: 'number', v: 3 });
+  });
+
+  it('does not branch for a single chain of calls', () => {
+    const run = runEntry('function fact(n) { return n <= 1 ? 1 : n * fact(n - 1); }', 'fact', { n: 4 });
+    const tree = readCallTree(run.steps);
+    expect(tree.nodes.size).toBe(4);
+    expect(tree.branching).toBe(false);
+  });
+
+  it('hangs calls made through a callback from the call that made them', () => {
+    const run = runEntry('function walk(d) { if (d === 2) return 0; [0, 1].forEach(() => walk(d + 1)); return 0; }', 'walk', { d: 0 });
+    expect(run.status).toBe('finished');
+    const tree = readCallTree(run.steps);
+    expect(tree.recursive).toEqual(['walk']);
+    expect(tree.nodes.size).toBe(7);
+    const root = tree.nodes.get(tree.roots[0])!;
+    expect(root.children.map((c) => tree.nodes.get(c)!.args)).toEqual(['1', '1']);
   });
 });
 

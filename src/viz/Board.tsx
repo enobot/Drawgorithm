@@ -15,6 +15,7 @@ import {
   windowOf,
 } from './analysis';
 import { ArrayView, Cells, isGrid, type ArrayRole, type DequeExtras } from './ArrayView';
+import { BitRows } from './BitsView';
 import { lastRead, trackArrayItems } from './illustrated/identity';
 import { ListScene } from './illustrated/ListScene';
 import { QueueScene } from './illustrated/QueueScene';
@@ -393,6 +394,9 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
             })}
           </AnimatePresence>
         </div>
+      )}
+      {(hints.usage?.bits.length ?? 0) > 0 && (
+        <BitRows frame={frame} step={step} steps={ctx.steps} names={hints.usage!.bits} active={active} />
       )}
       {above.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

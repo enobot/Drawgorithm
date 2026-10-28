@@ -70,10 +70,31 @@ function errorFrom(e: unknown, interp: Interpreter): { error: EngineError; conte
   };
 }
 
-function inputValue(interp: Interpreter, value: unknown, kind: string): Value {
+function inputValue(interp: Interpreter, value: unknown, kind: string, pos = -1): Value {
   if (kind === 'tree') return Array.isArray(value) ? buildTree(interp, value) : null;
-  if (kind === 'list') return Array.isArray(value) ? buildList(interp, value) : null;
+  if (kind === 'list') return Array.isArray(value) ? buildList(interp, value, pos) : null;
   return fromJSON(value);
+}
+
+/**
+ * Reads a `pos` input (see InputKind): it applies to the first linked-list input. Returns the
+ * position, or a message when the position can't be used.
+ */
+function cyclePosition(inputs: RunRequest['inputs']): { pos: number; error: string | null } {
+  const posInput = inputs.find((i) => i.kind === 'pos');
+  if (!posInput) return { pos: -1, error: null };
+  const list = inputs.find((i) => i.kind === 'list');
+  const p = posInput.value;
+  if (!list)
+    return { pos: -1, error: `Input ${posInput.name} is a cycle position, but no input is drawn as a linked list for it to link.` };
+  const length = Array.isArray(list.value) ? list.value.length : 0;
+  if (typeof p !== 'number' || !Number.isInteger(p) || p < -1 || p >= length) {
+    return {
+      pos: -1,
+      error: `Input ${posInput.name} must be -1 (no cycle) or a node position from 0 to ${length - 1}: the last node of ${list.name} links back to that node.`,
+    };
+  }
+  return { pos: p, error: null };
 }
 
 export function runProgram(req: RunRequest): RunResult {
@@ -122,25 +143,34 @@ export function runProgram(req: RunRequest): RunResult {
     if (req.mode === 'function') {
       const binding = entry ? interp.globalScope.vars.get(entry) : undefined;
       const fn = binding?.initialized ? binding.value : undefined;
+      // A cycle position builds the linked-list input; it is not an argument.
+      const passed = req.inputs.filter((i) => i.kind !== 'pos');
       if (!(fn instanceof Closure)) {
         const message = req.entry
-          ? `Define a function named ${req.entry}(${req.inputs.map((i) => i.name).join(', ')}). Run calls it with the inputs.`
+          ? `Define a function named ${req.entry}(${passed.map((i) => i.name).join(', ')}). Run calls it with the inputs.`
           : 'Write a function at the top level of your code. Run calls the first one it finds with the inputs.';
         const error: EngineError = { kind: 'setup', name: 'Setup', message, loc: null };
         interp.record('error', null, message);
         return finish('error', error);
       }
+      const cycle = cyclePosition(req.inputs);
+      if (cycle.error) {
+        const error: EngineError = { kind: 'setup', name: 'Setup', message: cycle.error, loc: null };
+        interp.record('error', null, cycle.error);
+        return finish('error', error);
+      }
       const params = fn.node.params.map((p) =>
         p.type === 'Identifier' ? p.name : p.type === 'AssignmentPattern' && p.left.type === 'Identifier' ? p.left.name : '',
       );
-      const byName = req.inputs.length > 0 && req.inputs.every((i) => params.includes(i.name));
-      const ordered = byName ? [...req.inputs].sort((a, b) => params.indexOf(a.name) - params.indexOf(b.name)) : req.inputs;
-      if (!byName && req.inputs.length && params.some(Boolean)) {
+      const byName = passed.length > 0 && passed.every((i) => params.includes(i.name));
+      const ordered = byName ? [...passed].sort((a, b) => params.indexOf(a.name) - params.indexOf(b.name)) : passed;
+      if (!byName && passed.length && params.some(Boolean)) {
         notes.push(
-          `Inputs were passed in order because their names (${req.inputs.map((i) => i.name).join(', ')}) don't match the parameters (${params.join(', ')}).`,
+          `Inputs were passed in order because their names (${passed.map((i) => i.name).join(', ')}) don't match the parameters (${params.join(', ')}).`,
         );
       }
-      const args = ordered.map((i) => inputValue(interp, i.value, i.kind));
+      const listInput = passed.find((i) => i.kind === 'list');
+      const args = ordered.map((i) => inputValue(interp, i.value, i.kind, i === listInput ? cycle.pos : -1));
       const lastBefore = interp.steps.length;
       const value = interp.callEntry(
         fn,

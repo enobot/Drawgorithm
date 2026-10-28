@@ -1,8 +1,8 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { setFormatListener } from '../editor/monaco';
 import { LANGUAGES } from '../languages';
 import { PROBLEMS } from '../problems/catalog';
-import { CUSTOM_ID, currentWork, displayedRun, problemFor, useStore } from '../state/store';
+import { CUSTOM_ID, currentWork, displayedRun, problemFor, shownCode, useStore } from '../state/store';
 import { CodeEditor, type EditorMarks } from './CodeEditor';
 
 function useEditorMarks(): EditorMarks {
@@ -13,7 +13,7 @@ function useEditorMarks(): EditorMarks {
   const live = useStore((s) => s.live.result);
   const lastDrawn = useStore((s) => s.live.lastDrawn);
   const selectedNode = useStore((s) => s.selectedNode);
-  const code = useStore((s) => currentWork(s).code);
+  const code = useStore(shownCode);
 
   return useMemo(() => {
     const marks: EditorMarks = { current: null, previousLine: null, related: [], pendingLine: null, error: null };
@@ -44,6 +44,36 @@ function useEditorMarks(): EditorMarks {
   }, [tab, run, problemId, stepIndex, live, lastDrawn, selectedNode, code]);
 }
 
+/**
+ * A walkthrough's answer, read-only, with the running step's line marked as the editor marks it.
+ * It is not put in the editor, so the learner's code and its undo history stay untouched.
+ */
+function AnswerCode({ code, marks }: { code: string; marks: EditorMarks }) {
+  const box = useRef<HTMLDivElement>(null);
+  const current = marks.current?.line ?? null;
+  useEffect(() => {
+    if (current !== null) box.current?.querySelector(`[data-line="${current}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [current]);
+  return (
+    <div ref={box} className="h-full overflow-auto py-3 font-mono text-[14px] leading-[22px]" aria-label="Answer code (read-only)">
+      {code
+        .replace(/\n$/, '')
+        .split('\n')
+        .map((text, i) => {
+          const line = i + 1;
+          const mark =
+            line === current ? 'bg-teal-400/15 shadow-[inset_3px_0_0_0_#5eead4]' : line === marks.previousLine ? 'bg-navy-800/70' : '';
+          return (
+            <div key={line} data-line={line} className={`flex whitespace-pre pr-4 ${mark}`}>
+              <span className="w-12 shrink-0 select-none pr-4 text-right text-navy-500">{line}</span>
+              <span className="text-navy-100">{text || ' '}</span>
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
 function SupportedJs() {
   return (
     <details className="text-[12.5px] text-navy-300">
@@ -69,6 +99,8 @@ export function EditorPanel() {
   const problemId = useStore((s) => s.problemId);
   const custom = useStore((s) => s.custom);
   const code = useStore((s) => currentWork(s).code);
+  const walkthrough = useStore((s) => (s.walkthrough?.problemId === s.problemId ? s.walkthrough : null));
+  const endWalkthrough = useStore((s) => s.endWalkthrough);
   const runStatus = useStore((s) => s.run.status);
   const hintDismissed = useStore((s) => s.hintDismissed);
   const reveal = useStore((s) => s.reveal);
@@ -117,14 +149,20 @@ export function EditorPanel() {
         <button
           type="button"
           className="btn-quiet"
-          disabled={!edited}
+          disabled={!edited || !!walkthrough}
           onClick={() => {
             if (window.confirm('Replace your code with the starter code? You can undo this in the editor with Ctrl+Z.')) resetCode();
           }}
         >
           Reset
         </button>
-        <button type="button" className="btn-quiet" onClick={requestFormat} title="Format Code with Prettier (Shift+Alt+F)">
+        <button
+          type="button"
+          className="btn-quiet"
+          onClick={requestFormat}
+          disabled={!!walkthrough}
+          title="Format Code with Prettier (Shift+Alt+F)"
+        >
           Format Code
         </button>
         <label
@@ -184,26 +222,41 @@ export function EditorPanel() {
           </button>
         </div>
       )}
+      {walkthrough && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-navy-700 bg-violet-400/10 px-3 py-1.5 text-[13px]">
+          <span className="text-navy-100">
+            <strong className="text-violet-100">Answer walkthrough</strong> (read-only). Your own code is kept and comes back when you
+            leave.
+          </span>
+          <button type="button" className="btn-outline h-7" onClick={endWalkthrough}>
+            Back to my code
+          </button>
+        </div>
+      )}
       <div className="min-h-0 flex-1">
-        <CodeEditor
-          value={code}
-          onChange={(next) => {
-            if (next === useStore.getState().work[useStore.getState().problemId]?.code) return;
-            setCode(next);
-          }}
-          onRun={() => void startRun()}
-          onCursorLine={setCursorLine}
-          onSave={() => {
-            if (useStore.getState().formatOnSave) requestFormat();
-            else
-              useStore.setState({
-                formatMessage: { text: 'Your code is saved automatically. Turn on Format on save to format with Ctrl+S.', tone: 'ok' },
-              });
-          }}
-          marks={marks}
-          reveal={reveal}
-          formatNonce={formatNonce}
-        />
+        {walkthrough ? (
+          <AnswerCode code={walkthrough.code} marks={marks} />
+        ) : (
+          <CodeEditor
+            value={code}
+            onChange={(next) => {
+              if (next === useStore.getState().work[useStore.getState().problemId]?.code) return;
+              setCode(next);
+            }}
+            onRun={() => void startRun()}
+            onCursorLine={setCursorLine}
+            onSave={() => {
+              if (useStore.getState().formatOnSave) requestFormat();
+              else
+                useStore.setState({
+                  formatMessage: { text: 'Your code is saved automatically. Turn on Format on save to format with Ctrl+S.', tone: 'ok' },
+                });
+            }}
+            marks={marks}
+            reveal={reveal}
+            formatNonce={formatNonce}
+          />
+        )}
       </div>
       <div className="flex flex-col gap-1.5 border-t border-navy-700 px-3 py-2">
         <p className="text-[12.5px]" aria-live="polite">

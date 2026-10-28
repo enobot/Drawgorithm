@@ -614,10 +614,12 @@ export function buildTree(host: Host, items: unknown[]): Value {
   return root;
 }
 
-export function buildList(host: Host, items: unknown[]): Value {
-  let head: Value = null;
-  for (let i = items.length - 1; i >= 0; i--) head = makeListNode(host, fromJSON(items[i]), head);
-  return head;
+/** `pos` (0 to length - 1) links the last node back to the node at that index; -1 means no cycle. */
+export function buildList(host: Host, items: unknown[], pos = -1): Value {
+  const nodes: ObjRecord[] = [];
+  for (let i = items.length - 1; i >= 0; i--) nodes.unshift(makeListNode(host, fromJSON(items[i]), nodes[0] ?? null));
+  if (pos >= 0 && pos < nodes.length) nodes[nodes.length - 1].props.set('next', nodes[pos]);
+  return nodes[0] ?? null;
 }
 
 export function makeGlobals(host: Host): Map<string, Value> {

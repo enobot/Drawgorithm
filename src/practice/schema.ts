@@ -43,7 +43,11 @@ export type Renderer =
   | 'graph'
   | 'trie'
   | 'deque'
-  | 'union-find';
+  | 'union-find'
+  /** recursive calls as a tree (backtracking decision trees, repeated subproblems) */
+  | 'call-tree'
+  /** integers as rows of bits */
+  | 'bits';
 
 export interface ExerciseParam {
   name: string;

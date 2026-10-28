@@ -19,6 +19,7 @@ const KINDS: { value: InputKind; label: string }[] = [
   { value: 'auto', label: 'value' },
   { value: 'tree', label: 'binary tree' },
   { value: 'list', label: 'linked list' },
+  { value: 'pos', label: 'cycle position (pos)' },
 ];
 
 /**
@@ -55,10 +56,28 @@ function FitWidth({ children }: { children: ReactNode }) {
   );
 }
 
-/** Draws one input the way the board would, so the problem has a picture before any code runs. */
-function InputPicture({ row }: { row: InputRow }) {
+/**
+ * Draws one input the way the board would, so the problem has a picture before any code runs.
+ * `pos` is the cycle position for the linked-list input; `listName` names that input for a `pos` row.
+ */
+function InputPicture({ row, pos, listName }: { row: InputRow; pos: number; listName: string | null }) {
   const parsed = parseValue(row.text);
-  const picture = useMemo(() => (parsed.ok ? previewHeap(parsed.value, row.kind) : null), [parsed.ok, parsed.value, row.kind]);
+  const picture = useMemo(
+    () => (parsed.ok && row.kind !== 'pos' ? previewHeap(parsed.value, row.kind, pos) : null),
+    [parsed.ok, parsed.value, row.kind, pos],
+  );
+  if (row.kind === 'pos') {
+    return (
+      <p className="text-[12.5px] text-navy-300">
+        {!listName
+          ? 'No input is drawn as a linked list, so this position links nothing.'
+          : parsed.value === -1
+            ? `-1: ${listName} has no cycle.`
+            : `The last node of ${listName} links back to the node at position ${String(parsed.value)} (counting from 0).`}{' '}
+        This input builds the list; it is not passed to your function.
+      </p>
+    );
+  }
   if (!picture) return null;
   const { heap, root } = picture;
   const id = refId(root);
@@ -177,11 +196,16 @@ export function ProblemPanel() {
   const p = problemFor(problemId, custom);
   const isCustom = problemId === CUSTOM_ID;
   const expectedOk = !work.expectedText.trim() || parseValue(work.expectedText).ok;
+  // A cycle position is not an argument (see InputKind), so it never stands in for a parameter.
   const missing = missingInputs(
     p,
-    work.inputs.map((r) => r.name),
+    work.inputs.filter((r) => r.kind !== 'pos').map((r) => r.name),
     hints,
   );
+  // A `pos` input links the tail of the first linked-list input back into the list.
+  const listRow = work.inputs.find((r) => r.kind === 'list');
+  const posRow = work.inputs.find((r) => r.kind === 'pos');
+  const cyclePos = posRow ? parseValue(posRow.text).value : -1;
   const selectedCase = p.cases[work.caseIndex];
   const inputsEdited = !!selectedCase && work.inputs.some((r) => !deepEqual(parseValue(r.text).value, selectedCase.inputs[r.name]));
 
@@ -285,7 +309,13 @@ export function ProblemPanel() {
                   className={`field ${ok ? '' : 'border-rose-400'}`}
                 />
                 {!ok && <p className="text-[12px] text-rose-300">Not valid JSON yet, e.g. [2, 7, 11, 15], 9 or "abc".</p>}
-                {ok && <InputPicture row={row} />}
+                {ok && (
+                  <InputPicture
+                    row={row}
+                    pos={row === listRow && typeof cyclePos === 'number' ? cyclePos : -1}
+                    listName={listRow?.name ?? null}
+                  />
+                )}
               </div>
             );
           })}

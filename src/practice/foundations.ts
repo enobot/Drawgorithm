@@ -98,6 +98,8 @@ export const SUPPORTED_RENDERERS: Renderer[] = [
   'trie',
   'deque',
   'union-find',
+  'call-tree',
+  'bits',
 ];
 
 type Brief = [number, string, TopicId, Difficulty, string, string];
@@ -112,7 +114,7 @@ const BRIEFS: Brief[] = [
   [6, 'Mirror Message', 'two-pointers', 'Easy', 'Check whether a string is a palindrome under explicitly defined character rules.', 'Pointers moving inward and comparing characters.'],
   [7, 'Merge Delivery Logs', 'two-pointers', 'Easy', 'Merge two sorted timestamp arrays into one sorted result.', 'A pointer in each source and an output row.'],
   [8, 'Compact Sorted Readings', 'two-pointers', 'Easy', 'Remove duplicates in place from a sorted array and return the valid length.', 'Read/write pointers and the retained prefix.'],
-  [9, 'Closest Weight Pair', 'two-pointers', 'Medium', 'In a sorted array, find two distinct positions whose sum is closest to a target.', 'Endpoint pointers, candidate sums, and best-so-far pair.'],
+  [9, 'Closest Weight Pair', 'two-pointers', 'Medium', 'In a sorted array, find the sum of two distinct positions closest to a target.', 'Endpoint pointers, candidate sums, and the best sum so far.'],
   [10, 'Catch the Rain', 'two-pointers', 'Hard', 'Calculate trapped water between nonnegative column heights.', 'Columns, boundary information, and accumulated water.'],
   [11, 'Best Observation Window', 'sliding-window', 'Easy', 'Find the largest sum of any contiguous window of a given valid size.', 'Window movement and outgoing/incoming contributions.'],
   [12, 'Quiet Frequency Band', 'sliding-window', 'Medium', 'Find the longest substring containing no repeated characters.', 'Expanding/shrinking window and membership state.'],
@@ -163,7 +165,7 @@ const BRIEFS: Brief[] = [
   [57, 'Nonadjacent Rewards', 'dp', 'Medium', 'Choose nonadjacent array positions to maximize total reward.', 'Take/skip transitions.'],
   [58, 'Fewest Tokens', 'dp', 'Medium', 'Find the minimum number of reusable positive denominations forming a target.', 'Reachable totals and candidate transitions.'],
   [59, 'Shared Subsequence', 'dp', 'Medium', 'Find the length of the longest common subsequence of two strings.', 'DP grid, character comparisons, and dependencies.'],
-  [60, 'Edit a Message', 'dp', 'Hard', 'Find the minimum number of insertions, deletions, and substitutions needed to transform one string into another.', 'Edit-distance grid and one optimal reconstruction.'],
+  [60, 'Edit a Message', 'dp', 'Hard', 'Find the minimum number of insertions, deletions, and substitutions needed to transform one string into another.', 'Edit-distance grid and the cells each one depends on.'],
   [61, 'Combine Reservations', 'greedy', 'Medium', 'Merge overlapping time intervals under a specified endpoint policy.', 'Sorted intervals and expanding merged ranges.'],
   [62, 'Maximum Meetings', 'greedy', 'Medium', 'Select the largest number of nonoverlapping meetings for one room.', 'Finish-time ordering and accepted/rejected intervals.'],
   [63, 'Reach the Finish', 'greedy', 'Medium', 'Determine whether the last array position is reachable using bounded forward jumps from each position.', 'Expanding reachable frontier.'],
@@ -176,7 +178,7 @@ const BRIEFS: Brief[] = [
   [70, 'Board Dictionary Hunt', 'tries', 'Hard', 'Find dictionary words in a letter grid using orthogonal moves without reusing cells within a word.', 'Board path synchronized with trie traversal.'],
   [71, 'Bit Counter', 'bits-matrices', 'Easy', 'Count set bits in a nonnegative fixed-width integer.', 'Binary representation and cleared bits.'],
   [72, 'Lone Identifier', 'bits-matrices', 'Easy', 'Find the identifier appearing once when every other identifier appears twice.', 'Aligned XOR accumulation.'],
-  [73, 'Turn the Image', 'bits-matrices', 'Medium', 'Rotate a square matrix 90 degrees clockwise in place.', 'Cells moving through rotation cycles.'],
+  [73, 'Turn the Image', 'bits-matrices', 'Medium', 'Rotate a square matrix 90 degrees clockwise in place.', 'Cells swapped across the diagonal, then each row reversed.'],
   [74, 'Search a Sorted Grid', 'bits-matrices', 'Medium', 'Find a target in a matrix whose rows and columns are ascending.', 'Comparisons eliminating a row or column.'],
   [75, 'Recently Used Cache', 'bits-matrices', 'Hard', 'Implement a fixed-capacity LRU cache with average O(1) get and put.', 'Synchronized hash lookup and doubly linked recency list.'],
 ];

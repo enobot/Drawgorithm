@@ -108,6 +108,8 @@ export function TrieView({ model, heap, tags, activity, created }: TrieViewProps
             const t = tags.get(n.id) ?? [];
             const isRoot = n.parent === null;
             const word = spell(n.id);
+            // Counters fit in the corner badge; a stored word is listed under the drawing instead.
+            const counter = n.extras.find((x) => x.value.t === 'number');
             const describe = [
               isRoot ? 'root of the trie' : `node for "${word}"`,
               n.terminal ? `a word ends here (${n.terminalField})` : '',
@@ -139,9 +141,9 @@ export function TrieView({ model, heap, tags, activity, created }: TrieViewProps
                   ) : (
                     <span className="text-[16px]">{n.char}</span>
                   )}
-                  {n.extras.length > 0 && (
+                  {counter && (
                     <span className="absolute -right-2.5 -top-2 rounded-full bg-navy-700 px-1 text-[9.5px] font-bold leading-4 text-navy-100 shadow-[inset_0_0_0_1px_rgb(166_181_210/0.5)]">
-                      {formatSnap(n.extras[0].value, heap, 2)}
+                      {formatSnap(counter.value, heap, 2)}
                     </span>
                   )}
                 </div>
@@ -177,10 +179,11 @@ export function TrieView({ model, heap, tags, activity, created }: TrieViewProps
             This step wrote the word-end mark ({nodes.get(id)!.terminalField}) on “{spell(id)}”.
           </p>
         ))}
-        {[...nodes.values()].some((n) => n.extras.length) && (
+        {[...nodes.values()].some((n) => n.extras.some((x) => x.value.t === 'number')) && (
           <p>
-            Small numbers on a node: {[...new Set([...nodes.values()].flatMap((n) => n.extras.map((x) => x.key)))].join(', ')}, as stored on
-            it.
+            Small numbers on a node:{' '}
+            {[...new Set([...nodes.values()].flatMap((n) => n.extras.filter((x) => x.value.t === 'number').map((x) => x.key)))].join(', ')},
+            as stored on it.
           </p>
         )}
       </div>
