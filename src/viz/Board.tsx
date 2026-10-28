@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { ProblemDef } from '../problems/catalog';
 import type { Comparison } from '../problems/compare';
 import type { FrameSnap, Heap, HeapSnap, StaticHints, Step, VarSnap } from '../trace/types';
@@ -54,6 +54,11 @@ export interface BoardContext {
   listSlots?: Map<number, ListSlot>;
   /** Draw queues, linked lists and index-searched arrays as illustrated scenes (same trace, different picture). */
   illustrated?: boolean;
+  /**
+   * Also draw the technical picture of structures that have a scene (the "Both" view).
+   * Defaults to the opposite of `illustrated`. Structures without a scene are always drawn technically.
+   */
+  technical?: boolean;
   /** Every step of the run, for scenes that need history (who joined a line when, the last slot read). */
   steps?: Step[];
   /** Scroll the editor to a line (e.g. where the selected person joined the line). */
@@ -83,6 +88,23 @@ function queuedNodes(frame: FrameSnap, heap: Heap, hints: StaticHints, shapeOf: 
   return out;
 }
 
+/**
+ * A structure that has an illustrated scene: the scene alone, or, in the "Both" view, the
+ * scene above its technical drawing of the same step.
+ */
+function withScene(ctx: BoardContext, scene: ReactNode, drawing: ReactNode): ReactNode {
+  if (!(ctx.technical ?? !ctx.illustrated)) return scene;
+  return (
+    <div className="flex flex-col gap-3">
+      {scene}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[11.5px] font-semibold text-navy-400">Technical view</span>
+        {drawing}
+      </div>
+    </div>
+  );
+}
+
 function StructureFor({
   names,
   h,
@@ -107,51 +129,7 @@ function StructureFor({
       const role = roleOf(name, hints);
       const reads = active ? (focus.cellReads.get(h.id) ?? new Set<number>()) : new Set<number>();
       const writes = active ? (focus.cellWrites.get(h.id) ?? new Set<number>()) : new Set<number>();
-      // Illustrated scenes, where a real-life picture fits the operation. Everything else stays technical.
-      if (ctx.illustrated && role === 'queue') {
-        return (
-          <QueueScene
-            arr={h}
-            heap={heap}
-            names={names}
-            track={ctx.steps ? (trackArrayItems(ctx.steps, h.id)[step.index] ?? null) : null}
-            steps={ctx.steps}
-            effects={active ? step.effects : []}
-            reads={reads}
-            writes={writes}
-            overlay={!!ctx.details}
-            shapeOf={ctx.shapeOf ?? conventionShape}
-            onSelectNode={ctx.onSelectNode}
-            onRevealLine={ctx.onRevealLine}
-          />
-        );
-      }
-      if (ctx.illustrated && role === 'array' && markers.some((m) => m.axis === 0) && !isGrid(h, heap)) {
-        const compare = active && isComparison(step) ? [...step.effects].reverse().find((e) => e.type === 'compare') : undefined;
-        const seen = ctx.steps
-          ? lastRead(ctx.steps, h.id, step.index)
-          : reads.size
-            ? { step: step.index, index: Math.max(...reads) }
-            : null;
-        return (
-          <ShelfScene
-            arr={h}
-            heap={heap}
-            name={name}
-            markers={markers.filter((m) => m.axis === 0)}
-            window={windowOf(markers)}
-            reads={reads}
-            writes={writes}
-            result={result}
-            comparing={active && isComparison(step)}
-            compare={compare?.type === 'compare' ? { text: compare.text, result: compare.result } : null}
-            lastRead={seen ? { index: seen.index, now: active && seen.step === step.index } : null}
-            overlay={!!ctx.details}
-            shapeOf={ctx.shapeOf ?? conventionShape}
-          />
-        );
-      }
-      return (
+      const drawing = (
         <ArrayView
           arr={h}
           heap={heap}
@@ -167,6 +145,55 @@ function StructureFor({
           shapeOf={ctx.shapeOf}
         />
       );
+      // Illustrated scenes, where a real-life picture fits the operation. Everything else stays technical.
+      if (ctx.illustrated && role === 'queue') {
+        return withScene(
+          ctx,
+          <QueueScene
+            arr={h}
+            heap={heap}
+            names={names}
+            track={ctx.steps ? (trackArrayItems(ctx.steps, h.id)[step.index] ?? null) : null}
+            steps={ctx.steps}
+            effects={active ? step.effects : []}
+            reads={reads}
+            writes={writes}
+            overlay={!!ctx.details}
+            shapeOf={ctx.shapeOf ?? conventionShape}
+            onSelectNode={ctx.onSelectNode}
+            onRevealLine={ctx.onRevealLine}
+          />,
+          drawing,
+        );
+      }
+      if (ctx.illustrated && role === 'array' && markers.some((m) => m.axis === 0) && !isGrid(h, heap)) {
+        const compare = active && isComparison(step) ? [...step.effects].reverse().find((e) => e.type === 'compare') : undefined;
+        const seen = ctx.steps
+          ? lastRead(ctx.steps, h.id, step.index)
+          : reads.size
+            ? { step: step.index, index: Math.max(...reads) }
+            : null;
+        return withScene(
+          ctx,
+          <ShelfScene
+            arr={h}
+            heap={heap}
+            name={name}
+            markers={markers.filter((m) => m.axis === 0)}
+            window={windowOf(markers)}
+            reads={reads}
+            writes={writes}
+            result={result}
+            comparing={active && isComparison(step)}
+            compare={compare?.type === 'compare' ? { text: compare.text, result: compare.result } : null}
+            lastRead={seen ? { index: seen.index, now: active && seen.step === step.index } : null}
+            overlay={!!ctx.details}
+            shapeOf={ctx.shapeOf ?? conventionShape}
+          />,
+          drawing,
+        );
+      }
+      return drawing;
     }
     case 'map':
       return (
@@ -384,34 +411,40 @@ export function Structures({ ctx }: { ctx: BoardContext }) {
         />
       )}
       {list.chains.length > 0 &&
-        (ctx.illustrated ? (
-          <ListScene
-            diagram={list}
-            heap={step.heap}
-            labels={labels}
-            current={ctx.current}
-            written={focus.propWrites}
-            created={focus.created}
-            highlighted={ctx.highlightedIds}
-            selected={ctx.selectedNode}
-            onSelect={ctx.onSelectNode}
-            slots={ctx.listSlots}
-            overlay={!!ctx.details}
-          />
-        ) : (
-          <ListView
-            diagram={list}
-            heap={step.heap}
-            labels={labels}
-            current={ctx.current}
-            written={focus.propWrites}
-            created={focus.created}
-            highlighted={ctx.highlightedIds}
-            selected={ctx.selectedNode}
-            onSelect={ctx.onSelectNode}
-            slots={ctx.listSlots}
-          />
-        ))}
+        (() => {
+          const drawing = (
+            <ListView
+              diagram={list}
+              heap={step.heap}
+              labels={labels}
+              current={ctx.current}
+              written={focus.propWrites}
+              created={focus.created}
+              highlighted={ctx.highlightedIds}
+              selected={ctx.selectedNode}
+              onSelect={ctx.onSelectNode}
+              slots={ctx.listSlots}
+            />
+          );
+          if (!ctx.illustrated) return drawing;
+          return withScene(
+            ctx,
+            <ListScene
+              diagram={list}
+              heap={step.heap}
+              labels={labels}
+              current={ctx.current}
+              written={focus.propWrites}
+              created={focus.created}
+              highlighted={ctx.highlightedIds}
+              selected={ctx.selectedNode}
+              onSelect={ctx.onSelectNode}
+              slots={ctx.listSlots}
+              overlay={!!ctx.details}
+            />,
+            drawing,
+          );
+        })()}
     </section>
   );
 }

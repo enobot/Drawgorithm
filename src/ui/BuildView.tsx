@@ -18,7 +18,8 @@ export function BuildView() {
   const selectNode = useStore((s) => s.selectNode);
   const startRun = useStore((s) => s.startRun);
   const details = useStore((s) => s.showDetails);
-  const illustrated = useStore((s) => s.viewStyle === 'illustrated');
+  const illustrated = useStore((s) => s.viewStyle !== 'technical');
+  const technical = useStore((s) => s.viewStyle !== 'illustrated');
   const revealLine = useStore((s) => s.revealLine);
   const current = live.result;
   const drawn = current?.step ? current : live.lastDrawn;
@@ -55,6 +56,7 @@ export function BuildView() {
         onSelectNode: (id) => selectNode(selectedNode === id ? null : id),
         details,
         illustrated,
+        technical,
         onRevealLine: revealLine,
       }
     : null;

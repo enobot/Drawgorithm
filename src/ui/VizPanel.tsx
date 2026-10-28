@@ -1,6 +1,13 @@
-import { useStore, type VizTab } from '../state/store';
+import { useStore, type ViewStyle, type VizTab } from '../state/store';
 import { BuildView } from './BuildView';
 import { RunView } from './RunView';
+
+const STYLE_LABEL: Record<ViewStyle, string> = { illustrated: 'Illustrated', technical: 'Technical', both: 'Both' };
+const STYLE_TITLE: Record<ViewStyle, string> = {
+  illustrated: 'Scenes with people, shelves and ropes, drawn from the same run.',
+  technical: 'Cells, nodes and arrows, with every value spelled out.',
+  both: 'Each scene with its technical drawing underneath, at the same step.',
+};
 
 const TABS: { id: VizTab; label: string; hint: string }[] = [
   { id: 'build', label: 'Build', hint: 'The structure your top-level code creates, redrawn as you type.' },
@@ -46,24 +53,20 @@ export function VizPanel() {
             </button>
           ))}
         </div>
-        {/* Picture style: both show the same run at the same step; only the drawing changes. */}
+        {/* Picture style: every choice shows the same run at the same step; only the drawing changes. */}
         <div role="group" aria-label="Picture style" className="flex rounded-full bg-navy-950 p-0.5">
-          {(['illustrated', 'technical'] as const).map((s) => (
+          {(['illustrated', 'technical', 'both'] as const).map((s) => (
             <button
               key={s}
               type="button"
               aria-pressed={viewStyle === s}
               onClick={() => setViewStyle(s)}
-              title={
-                s === 'illustrated'
-                  ? 'Scenes with people, shelves and ropes, drawn from the same run.'
-                  : 'Cells, nodes and arrows, with every value spelled out.'
-              }
+              title={STYLE_TITLE[s]}
               className={`rounded-full px-3.5 py-1 text-[13px] font-semibold transition-colors pointer-coarse:py-2.5 ${
                 viewStyle === s ? 'bg-navy-700 text-navy-100' : 'text-navy-300 hover:text-navy-100'
               }`}
             >
-              {s === 'illustrated' ? 'Illustrated' : 'Technical'}
+              {STYLE_LABEL[s]}
             </button>
           ))}
         </div>
@@ -74,7 +77,9 @@ export function VizPanel() {
             title={
               viewStyle === 'illustrated'
                 ? 'Add indices, variable names and the collection state in code terms to the scenes.'
-                : 'Also show indices, declaration kinds and null children.'
+                : viewStyle === 'both'
+                  ? 'Show indices, declaration kinds and null children, and add the code-terms overlay to the scenes.'
+                  : 'Also show indices, declaration kinds and null children.'
             }
           >
             <input

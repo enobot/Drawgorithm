@@ -124,7 +124,8 @@ export function RunView() {
   const code = useStore((s) => currentWork(s).code);
   const startRun = useStore((s) => s.startRun);
   const details = useStore((s) => s.showDetails);
-  const illustrated = useStore((s) => s.viewStyle === 'illustrated');
+  const illustrated = useStore((s) => s.viewStyle !== 'technical');
+  const technical = useStore((s) => s.viewStyle !== 'illustrated');
   const revealLine = useStore((s) => s.revealLine);
   const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
   const sideBySide = useMedia(SHORT_WIDE);
@@ -193,6 +194,7 @@ export function RunView() {
     details,
     listSlots: listPlaces,
     illustrated,
+    technical,
     steps: result.steps,
     onRevealLine: revealLine,
   };

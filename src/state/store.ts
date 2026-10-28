@@ -29,7 +29,7 @@ export interface CustomProblem {
 }
 
 export type VizTab = 'build' | 'run';
-export type ViewStyle = 'illustrated' | 'technical';
+export type ViewStyle = 'illustrated' | 'technical' | 'both';
 
 export interface RunState {
   status: 'idle' | 'running' | 'done' | 'stopped' | 'failed';
@@ -95,7 +95,7 @@ interface State {
   autoRun: boolean;
   /** Drawings also show secondary detail: indices, declaration kinds, null children. */
   showDetails: boolean;
-  /** Illustrated scenes (people, shelves, ropes) or the technical drawing; both show the same trace. */
+  /** Illustrated scenes (people, shelves, ropes), the technical drawing, or both together; all show the same trace. */
   viewStyle: ViewStyle;
   /** Zoom of the drawing board, shared by Build and Run (1 = actual size). */
   boardZoom: number;
@@ -266,7 +266,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   formatMessage: null,
   autoRun: saved.autoRun ?? true,
   showDetails: saved.showDetails ?? false,
-  viewStyle: saved.viewStyle === 'technical' ? 'technical' : 'illustrated',
+  viewStyle: saved.viewStyle === 'technical' || saved.viewStyle === 'both' ? saved.viewStyle : 'illustrated',
   boardZoom: 1,
   bindings: saved.bindings ?? {},
 
