@@ -7,6 +7,7 @@ import type { ComputeDetail, Effect, Limits, OutputLine, SourceLoc, Step, StepKi
 import {
   BLOCKED_GLOBALS,
   MAX_ARRAY_LENGTH,
+  checkStringLength,
   arrayMethod,
   instanceOf,
   isKnownNativeMethod,
@@ -22,7 +23,7 @@ import { fmt, toStr, type NodeNamer } from './describe';
 import { EngineFailure, NeedsRun, ShortCircuit, UserThrow, type ErrorContext } from './errors';
 import { COMPARISON_OPS, arrayIndex, binaryOp, toNumber, truthy, typeOf } from './ops';
 import { locOf, sourceOf, unsupportedFeature } from './parse';
-import { captureFrames } from './snapshot';
+import { captureFrames, newSnapCache, snapString, type SnapCache } from './snapshot';
 import {
   Binding,
   ClassValue,
@@ -35,6 +36,7 @@ import {
   isNextField,
   isTreeNode,
   nodeValueField,
+  objectKeys,
   treeSides,
   type FnNode,
   type Frame,
@@ -90,6 +92,8 @@ export class Interpreter implements Host, NodeNamer {
 
   private ops = 0;
   private traceValues = 0;
+  /** Last snapshot of each object, so unchanged objects are shared between steps (see snapshot.ts). */
+  private snapCache: SnapCache = newSnapCache();
   private nextFrameId = 1;
   private nextObjectId = 1;
   private ids = new WeakMap<object, number>();
@@ -139,7 +143,7 @@ export class Interpreter implements Host, NodeNamer {
     if (v === undefined) return { t: 'undefined' };
     if (v === null) return { t: 'null' };
     if (typeof v === 'number') return { t: 'number', v };
-    if (typeof v === 'string') return { t: 'string', v };
+    if (typeof v === 'string') return snapString(v);
     if (typeof v === 'boolean') return { t: 'boolean', v };
     if (v instanceof Closure || v instanceof NativeFn || v instanceof ClassValue) return { t: 'function', name: v.name };
     const u = this.units[this.units.length - 1];
@@ -210,7 +214,7 @@ export class Interpreter implements Host, NodeNamer {
       case 'undefined':
         return 'undefined';
       case 'string':
-        return JSON.stringify(s.v);
+        return s.len ? `${JSON.stringify(s.v)}… (${s.len.toLocaleString('en-US')} characters)` : JSON.stringify(s.v);
       default:
         return String(s.v);
     }
@@ -309,7 +313,7 @@ export class Interpreter implements Host, NodeNamer {
         null,
       );
     }
-    const { frames, heap, size } = captureFrames(this.frames, this.globalScope, this.idOf, refs);
+    const { frames, heap, size } = captureFrames(this.frames, this.globalScope, this.idOf, refs, this.snapCache);
     this.traceValues += size;
     if (this.traceValues > this.limits.maxTraceValues) {
       throw this.failure(
@@ -319,7 +323,8 @@ export class Interpreter implements Host, NodeNamer {
         null,
       );
     }
-    if (extra.returning) frames[frames.length - 1].returning = extra.returning;
+    // Frames may be shared with earlier steps (see SnapCache): mark a copy, never the shared frame.
+    if (extra.returning) frames[frames.length - 1] = { ...frames[frames.length - 1], returning: extra.returning };
     const step: Step = {
       index: this.steps.length,
       kind,
@@ -694,7 +699,7 @@ export class Interpreter implements Host, NodeNamer {
     if (isOf) {
       if (Array.isArray(source)) live = source;
       items = live ? [] : iterate(this, source, node.right);
-    } else if (source instanceof ObjRecord) items = [...source.props.keys()];
+    } else if (source instanceof ObjRecord) items = objectKeys(source);
     else if (Array.isArray(source) || typeof source === 'string') items = [...source].map((_, i) => String(i));
     else items = [];
     const what = this.code(node.right);
@@ -1007,6 +1012,7 @@ export class Interpreter implements Host, NodeNamer {
         node.quasis.forEach((q, i) => {
           s += q.value.cooked ?? q.value.raw;
           if (i < node.expressions.length) s += toStr(this.evalExpr(node.expressions[i]));
+          checkStringLength(this, s.length, node);
         });
         return s;
       }
@@ -1047,6 +1053,8 @@ export class Interpreter implements Host, NodeNamer {
           v = instanceOf(l, r);
         } else {
           v = binaryOp(node.operator, l, r);
+          // Every string stays within the limit as it grows, so this never sees more than twice the limit.
+          if (typeof v === 'string') checkStringLength(this, v.length, node);
         }
         if (COMPARISON_OPS.has(node.operator)) {
           this.effect({ type: 'compare', text: `${this.f(l)} ${node.operator} ${this.f(r)}`, result: v as boolean });
@@ -1193,6 +1201,7 @@ export class Interpreter implements Host, NodeNamer {
       const cur = this.readVar(left);
       const r = this.evalExpr(node.right);
       const v = binaryOp(op.slice(0, -1), cur, r);
+      if (typeof v === 'string') checkStringLength(this, v.length, node);
       this.assignVar(left.name, v, node, {
         expression: `${left.name} ${op.slice(0, -1)} ${this.code(node.right)}`,
         substituted: `${this.f(cur)} ${op.slice(0, -1)} ${this.f(r)}`,
@@ -1217,6 +1226,7 @@ export class Interpreter implements Host, NodeNamer {
         return v;
       }
       const v = binaryOp(op.slice(0, -1), cur, this.evalExpr(node.right));
+      if (typeof v === 'string') checkStringLength(this, v.length, node);
       this.setMember(obj, key, v, node);
       return v;
     }

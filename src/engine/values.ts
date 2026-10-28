@@ -19,6 +19,22 @@ export class ObjRecord {
   }
 }
 
+/** True for keys JavaScript treats as array indexes ("0", "7", "42"; not "07" or "-1"). */
+const isIndexKey = (k: string) => /^(0|[1-9]\d*)$/.test(k) && Number(k) < 4294967295;
+
+/**
+ * An object's keys in the order JavaScript lists them (Object.keys, for…in, console.log):
+ * integer-like keys first, ascending, then every other key in the order it was added.
+ */
+export function objectKeys(obj: ObjRecord): string[] {
+  const indexes: string[] = [];
+  const rest: string[] = [];
+  for (const k of obj.props.keys()) (isIndexKey(k) ? indexes : rest).push(k);
+  if (!indexes.length) return rest;
+  indexes.sort((a, b) => Number(a) - Number(b));
+  return [...indexes, ...rest];
+}
+
 export class Closure {
   node: FnNode;
   scope: Scope;

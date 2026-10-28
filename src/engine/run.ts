@@ -11,13 +11,13 @@ import type {
   Step,
   ValueSnap,
 } from '../trace/types';
-import { buildList, buildTree, fromJSON, toPlain } from './builtins';
+import { MAX_ARRAY_LENGTH, MAX_STRING_LENGTH, buildList, buildTree, fromJSON, toPlain } from './builtins';
 import { inspect } from './describe';
 import { EngineFailure, NeedsRun, UserThrow, type ErrorContext } from './errors';
 import { collectHints } from './hints';
 import { Interpreter } from './interpreter';
 import { findUnsupported, locOf, parseProgram } from './parse';
-import { captureFrames } from './snapshot';
+import { captureFrames, snapString } from './snapshot';
 import { Closure, ObjRecord, type Value } from './values';
 
 export const DEFAULT_LIMITS: Limits = { maxSteps: 2000, maxOps: 2_000_000, maxDepth: 200, maxTraceValues: 3_000_000 };
@@ -46,6 +46,18 @@ function errorFrom(e: unknown, interp: Interpreter): { error: EngineError; conte
         kind: 'limit',
         name: 'RangeError',
         message: 'The calls went too deep for the interpreter. Check that your recursion has a base case.',
+        loc: interp.frames[interp.frames.length - 1]?.loc ?? null,
+      },
+      context: null,
+    };
+  }
+  // A value too big for the JavaScript engine itself (a check above should normally stop it first).
+  if (e instanceof RangeError && /invalid string length|invalid array length|allocation failed/i.test(e.message)) {
+    return {
+      error: {
+        kind: 'limit',
+        name: 'RangeError',
+        message: `A value got too big for Drawgorithms: strings are limited to ${MAX_STRING_LENGTH.toLocaleString('en-US')} characters and arrays to ${MAX_ARRAY_LENGTH.toLocaleString('en-US')} items.`,
         loc: interp.frames[interp.frames.length - 1]?.loc ?? null,
       },
       context: null,
@@ -193,7 +205,7 @@ function snapOf(interp: Interpreter, value: Value, last: Step | undefined): Valu
   if (value === undefined) return { t: 'undefined' };
   if (value === null) return { t: 'null' };
   if (typeof value === 'number') return { t: 'number', v: value };
-  if (typeof value === 'string') return { t: 'string', v: value };
+  if (typeof value === 'string') return snapString(value);
   if (typeof value === 'boolean') return { t: 'boolean', v: value };
   if (value instanceof Closure) return { t: 'function', name: value.name };
   const id = interp.idOf(value as object);

@@ -16,6 +16,8 @@ app works exactly as before (in development the header says "Sign-in not set up"
    VITE_SUPABASE_URL=https://abcd1234.supabase.co
    VITE_SUPABASE_ANON_KEY=your-anon-or-publishable-key
    ```
+   If Supabase shows the key as `VITE_SUPABASE_PUBLISHABLE_KEY` instead, paste that line as it
+   is: the app reads either name (the publishable one wins if both are set).
    `.env.local` is ignored by git. Restart `npm run dev` after changing it.
 4. **Authentication → URL Configuration**: set **Site URL** to where the app runs (for now
    `http://localhost:5173`) and add the same address, plus your future website address,

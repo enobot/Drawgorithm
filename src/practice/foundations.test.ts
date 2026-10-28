@@ -188,36 +188,73 @@ describe('Check all tests', () => {
   const e = FOUNDATIONS.find((x) => x.id === 'f75-01')!;
   const run = (req: Parameters<typeof runProgram>[0]) => Promise.resolve(runProgram(req));
 
+  const cases = e.content!.examples.length + e.content!.tests.length;
+  /** A runner that counts calls and fails the first `fail` of them with the given error. */
+  const failingFirst = (fail: number, error: () => Error) => {
+    const calls = { n: 0 };
+    const runner = (req: Parameters<typeof runProgram>[0]) => {
+      calls.n++;
+      return calls.n <= fail ? Promise.reject(error()) : Promise.resolve(runProgram(req));
+    };
+    return { calls, runner };
+  };
+
   it('reports every case as passed for the reference solution', async () => {
-    const results = await checkExercise(e, e.content!.solution.code, run);
-    expect(results).toHaveLength(e.content!.examples.length + e.content!.tests.length);
+    const results = (await checkExercise(e, e.content!.solution.code, run))!;
+    expect(results).toHaveLength(cases);
     expect(results.every((r) => r.status === 'passed')).toBe(true);
   });
 
   it('reports wrong answers as failed, with expected and actual', async () => {
-    const results = await checkExercise(e, e.content!.starter.javascript, run);
+    const results = (await checkExercise(e, e.content!.starter.javascript, run))!;
     const failed = results.find((r) => r.status === 'failed')!;
     expect(failed.message).toContain('Expected');
   });
 
-  it('retries once when the engine worker itself crashes', async () => {
-    let crashes = 1;
-    const flaky = (req: Parameters<typeof runProgram>[0]) => {
-      if (crashes-- > 0) return Promise.reject(new EngineStopped('crashed', 'worker died'));
+  it('retries a case once when the worker itself died, with one result per case', async () => {
+    const { calls, runner } = failingFirst(1, () => new EngineStopped('crashed', 'worker died', true));
+    const results = (await checkExercise(e, e.content!.solution.code, runner))!;
+    expect(results).toHaveLength(cases);
+    expect(results.every((r) => r.status === 'passed')).toBe(true);
+    expect(calls.n).toBe(cases + 1);
+  });
+
+  it('never retries a failure the engine reported: the same code and input fail the same way', async () => {
+    const { calls, runner } = failingFirst(Infinity, () => new EngineStopped('crashed', 'engine threw'));
+    const results = (await checkExercise(e, e.content!.solution.code, runner))!;
+    expect(calls.n).toBe(cases);
+    expect(results.every((r) => r.status === 'error' && r.message.includes('not retried'))).toBe(true);
+  });
+
+  it('stops after a worker dies twice on one case and marks the rest as not run', async () => {
+    const { calls, runner } = failingFirst(Infinity, () => new EngineStopped('crashed', 'worker died', true));
+    const results = (await checkExercise(e, e.content!.solution.code, runner))!;
+    expect(calls.n).toBe(2);
+    expect(results).toHaveLength(cases);
+    expect(results[0].message).toContain('stopped twice');
+    expect(results.slice(1).every((r) => r.status === 'error' && r.message.startsWith('Not run'))).toBe(true);
+    expect(results.some((r) => r.message.includes('not in your code'))).toBe(false);
+  });
+
+  it('reports nothing once the check is cancelled, and runs no more cases', async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const runner = (req: Parameters<typeof runProgram>[0]) => {
+      calls++;
+      if (calls === 2) controller.abort();
       return Promise.resolve(runProgram(req));
     };
-    const results = await checkExercise(e, e.content!.solution.code, flaky);
-    expect(results.every((r) => r.status === 'passed')).toBe(true);
+    expect(await checkExercise(e, e.content!.solution.code, runner, controller.signal)).toBeNull();
+    expect(calls).toBe(2);
   });
 
-  it('reports an engine that keeps crashing as an error that is not the learner’s fault', async () => {
-    const broken = () => Promise.reject(new EngineStopped('crashed', 'worker died'));
-    const results = await checkExercise(e, e.content!.solution.code, broken);
-    expect(results.every((r) => r.status === 'error' && r.message.includes('not in your code'))).toBe(true);
+  it('reports nothing when a newer check supersedes it', async () => {
+    const { runner } = failingFirst(1, () => new EngineStopped('superseded', 'replaced'));
+    expect(await checkExercise(e, e.content!.solution.code, runner)).toBeNull();
   });
 
-  it('reports a crash as an error, not a failure', async () => {
-    const results = await checkExercise(e, 'function findFirst(shelf, wanted) { return shelf.nope.length; }', run);
+  it('reports an error in the learner’s code as an error, not a failure', async () => {
+    const results = (await checkExercise(e, 'function findFirst(shelf, wanted) { return shelf.nope.length; }', run))!;
     expect(results.every((r) => r.status === 'error')).toBe(true);
   });
 });

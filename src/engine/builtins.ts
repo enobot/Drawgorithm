@@ -4,10 +4,23 @@ import type * as ES from 'estree';
 import type { Effect, ValueSnap } from '../trace/types';
 import { inspect, toStr } from './describe';
 import { sameValueZero, toNumber, toPrimitive, truthy } from './ops';
-import { ClassValue, Closure, NativeFn, ObjRecord, type HeapValue, type Value } from './values';
+import { ClassValue, Closure, NativeFn, ObjRecord, objectKeys, type HeapValue, type Value } from './values';
 
 export const MAX_ARRAY_LENGTH = 100_000;
-const MAX_STRING_LENGTH = 1_000_000;
+/** Longest string a program may build, so one runaway string can't exhaust the worker's memory. */
+export const MAX_STRING_LENGTH = 1_000_000;
+
+/** Stops the run with a clear message when a string would be longer than MAX_STRING_LENGTH. */
+export function checkStringLength(host: Pick<Host, 'fail'>, length: number, node: ES.Node): void {
+  if (length > MAX_STRING_LENGTH) {
+    host.fail(
+      'limit',
+      'RangeError',
+      `Strings are limited to ${MAX_STRING_LENGTH.toLocaleString('en-US')} characters in Drawgorithms.`,
+      node,
+    );
+  }
+}
 
 export interface Host {
   /** Calls a callback (e.g. the function passed to map or sort). */
@@ -134,9 +147,12 @@ export function arrayMethod(host: Host, arr: Value[], key: string): NativeFn | u
     case 'includes':
       return native('includes', (args) => arr.some((x) => sameValueZero(x, args[0])));
     case 'join':
-      return native('join', (args) => {
+      return native('join', (args, node) => {
         const sep = args[0] === undefined ? ',' : toStr(args[0]);
-        return arr.map((x) => (x === null || x === undefined ? '' : toStr(x))).join(sep);
+        const parts = arr.map((x) => (x === null || x === undefined ? '' : toStr(x)));
+        // Measure before joining: the joined string is never built if it would be too long.
+        checkStringLength(host, parts.reduce((n, p) => n + p.length, 0) + sep.length * Math.max(parts.length - 1, 0), node);
+        return parts.join(sep);
       });
     case 'reverse':
       return native('reverse', () => {
@@ -307,9 +323,15 @@ export function stringMethod(host: Host, s: string, key: string): NativeFn | und
     case 'trimEnd':
       return native('trimEnd', () => s.trimEnd());
     case 'padStart':
-      return native('padStart', (a) => s.padStart(toNumber(a[0]), a[1] === undefined ? ' ' : str(a[1])));
+      return native('padStart', (a, node) => {
+        checkStringLength(host, toNumber(a[0]), node);
+        return s.padStart(toNumber(a[0]), a[1] === undefined ? ' ' : str(a[1]));
+      });
     case 'padEnd':
-      return native('padEnd', (a) => s.padEnd(toNumber(a[0]), a[1] === undefined ? ' ' : str(a[1])));
+      return native('padEnd', (a, node) => {
+        checkStringLength(host, toNumber(a[0]), node);
+        return s.padEnd(toNumber(a[0]), a[1] === undefined ? ' ' : str(a[1]));
+      });
     case 'repeat':
       return native('repeat', (a, node) => {
         const n = toNumber(a[0]);
@@ -317,7 +339,15 @@ export function stringMethod(host: Host, s: string, key: string): NativeFn | und
         return s.repeat(n);
       });
     case 'concat':
-      return native('concat', (a) => s + a.map(str).join(''));
+      return native('concat', (a, node) => {
+        const parts = a.map(str);
+        checkStringLength(
+          host,
+          parts.reduce((n, p) => n + p.length, s.length),
+          node,
+        );
+        return s + parts.join('');
+      });
     case 'replace':
     case 'replaceAll':
       return native(key, (a, node) => {
@@ -325,7 +355,9 @@ export function stringMethod(host: Host, s: string, key: string): NativeFn | und
         const pattern = a[0] as string;
         const rep = a[1];
         const replacer = (match: string) => (isFn(rep) ? toStr(host.call(rep, undefined, [match], node)) : str(rep));
-        return key === 'replace' ? s.replace(pattern, replacer) : s.replaceAll(pattern, replacer);
+        const out = key === 'replace' ? s.replace(pattern, replacer) : s.replaceAll(pattern, replacer);
+        checkStringLength(host, out.length, node);
+        return out;
       });
     case 'localeCompare':
       return native('localeCompare', (a) => s.localeCompare(str(a[0])));
@@ -735,7 +767,7 @@ export function makeGlobals(host: Host): Map<string, Value> {
 
   const objectFn = new NativeFn('Object', null);
   const ownKeys = (v: Value): string[] => {
-    if (v instanceof ObjRecord) return [...v.props.keys()];
+    if (v instanceof ObjRecord) return objectKeys(v);
     if (Array.isArray(v)) return v.map((_, i) => String(i));
     if (typeof v === 'string') return [...v].map((_, i) => String(i));
     return [];
@@ -772,9 +804,11 @@ export function makeGlobals(host: Host): Map<string, Value> {
   g.set(
     'JSON',
     namespace('JSON', {
-      stringify: native('stringify', (a) => {
+      stringify: native('stringify', (a, node) => {
         const plain = toPlain(a[0]);
-        return plain === undefined ? undefined : JSON.stringify(plain);
+        const text = plain === undefined ? undefined : JSON.stringify(plain);
+        if (text !== undefined) checkStringLength(host, text.length, node);
+        return text;
       }),
       parse: native('parse', (a, node) => {
         try {
@@ -812,6 +846,25 @@ export function makeGlobals(host: Host): Map<string, Value> {
       return s;
     }),
   );
+
+  // Errors for `throw new Error("...")`. Callable with or without new, as in JavaScript. The
+  // name and message are ordinary fields here (in JavaScript they don't show up in Object.keys).
+  for (const name of ERROR_CLASSES) {
+    const make = (args: Value[]) => {
+      const e = new ObjRecord(name);
+      e.props.set('name', name);
+      e.props.set('message', args[0] === undefined ? '' : toStr(args[0]));
+      return e;
+    };
+    g.set(
+      name,
+      new NativeFn(
+        name,
+        (_t, args) => make(args),
+        (args) => make(args),
+      ),
+    );
+  }
 
   g.set(
     'TreeNode',
@@ -878,10 +931,17 @@ export const BLOCKED_GLOBALS = new Set([
   'queueMicrotask',
 ]);
 
+const ERROR_CLASSES = ['Error', 'TypeError', 'RangeError'];
+
 /** Classes that support `instanceof`. */
 export function instanceOf(v: Value, ctor: Value): boolean {
   if (ctor instanceof NativeFn) {
     switch (ctor.name) {
+      case 'Error':
+        return v instanceof ObjRecord && ERROR_CLASSES.includes(v.className ?? '');
+      case 'TypeError':
+      case 'RangeError':
+        return v instanceof ObjRecord && v.className === ctor.name;
       case 'Array':
         return Array.isArray(v);
       case 'Map':

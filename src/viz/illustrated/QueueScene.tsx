@@ -39,6 +39,16 @@ function itemText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): string {
   return formatSnap(v, heap, 1);
 }
 
+/** A value in full, for the picked-person line (cards may shorten it; nested values are spelled out). */
+function fullText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): string {
+  if (v.t === 'ref') {
+    const h = heap[v.id];
+    const shape = shapeOf(h);
+    if (h && shape) return `node ${nodeValueLabel(h as ObjectSnap, heap, shape)}`;
+  }
+  return formatSnap(v, heap);
+}
+
 /** What a person holds: a node reference is a round token with the node's value; anything else is written on a card. */
 function held(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): { text: string; node: boolean } {
   if (v.t === 'ref') {
@@ -69,8 +79,22 @@ export function QueueScene({
 }: QueueSceneProps) {
   const sketch = useSvgId();
   const [picked, setPicked] = useState<string | null>(null);
+  const [focused, setFocused] = useState<string | null>(null);
   const n = arr.items.length;
   const ids = track?.ids ?? arr.items.map((_, i) => `p${i}`);
+  // The picked person's full value, written out below the scene (a card can only show a shortened one).
+  const pickedIndex = picked === null ? -1 : ids.indexOf(picked);
+  const pickedLine = pickedIndex >= 0 ? joinedLineOf(picked!) : undefined;
+  const detail =
+    pickedIndex >= 0
+      ? `You picked ${names[0] ?? 'queue'}[${pickedIndex}] = ${fullText(arr.items[pickedIndex], heap, shapeOf)}.${
+          pickedLine ? ` It joined the line at line ${pickedLine}.` : ''
+        }`
+      : 'Tap or press Enter on a person to see their whole value.';
+  function joinedLineOf(id: string) {
+    const k = track?.joined.get(id);
+    return k !== undefined ? steps?.[k]?.loc?.line : undefined;
+  }
   const mine = effects.filter((e) => 'objId' in e && e.objId === arr.id);
   const served = mine.find((e) => e.type === 'array-remove' && e.end === 'front');
   const joinedNow = new Set<string>();
@@ -82,10 +106,7 @@ export function QueueScene({
   const width = FIRST + Math.max(n, 1) * SPACING + 40;
   const height = GROUND + (overlay ? 56 : 40);
   const name = names[0] ?? 'queue';
-  const joinedLine = (id: string) => {
-    const k = track?.joined.get(id);
-    return k !== undefined ? steps?.[k]?.loc?.line : undefined;
-  };
+  const joinedLine = joinedLineOf;
 
   return (
     <Paper
@@ -104,6 +125,7 @@ export function QueueScene({
       overlay={
         overlay ? `${name} = [${arr.items.map((v) => itemText(v, heap, shapeOf)).join(', ')}${arr.total > n ? ', …' : ''}]` : undefined
       }
+      detail={n > 0 ? detail : undefined}
     >
       <defs>
         <SketchFilter id={sketch} />
@@ -164,9 +186,24 @@ export function QueueScene({
                     if (refId !== null) onSelectNode?.(refId);
                     if (line) onRevealLine?.(line);
                   })}
-                  aria-label={`${name}[${i}] = ${itemText(v, heap, shapeOf)}${note ? `, just ${note}` : ''}${line ? `, joined the line at line ${line}` : ''}`}
+                  onFocus={() => setFocused(id)}
+                  onBlur={() => setFocused((f) => (f === id ? null : f))}
+                  aria-label={`${name}[${i}] = ${fullText(v, heap, shapeOf)}${note ? `, just ${note}` : ''}${line ? `, joined the line at line ${line}` : ''}`}
                 >
-                  <title>{`${name}[${i}] = ${itemText(v, heap, shapeOf)}${line ? ` (joined at line ${line})` : ''}`}</title>
+                  <title>{`${name}[${i}] = ${fullText(v, heap, shapeOf)}${line ? ` (joined at line ${line})` : ''}`}</title>
+                  {/* Picked: a solid ring. Keyboard focus: a dashed one, so tabbing through the line is visible. */}
+                  {(picked === id || focused === id) && (
+                    <ellipse
+                      cx={0}
+                      cy={-34}
+                      rx={32}
+                      ry={46}
+                      fill="none"
+                      stroke={TONE.compare}
+                      strokeWidth={2}
+                      strokeDasharray={picked === id ? undefined : '5 5'}
+                    />
+                  )}
                   <StickFigure pose="hold" tone={tone} walking={walking} facing={-1} filter={sketch}>
                     <ValueCard {...held(v, heap, shapeOf)} tone={tone} />
                   </StickFigure>
@@ -174,9 +211,6 @@ export function QueueScene({
                   {i === 0 && <Label x={0} y={20} text={n === 1 ? 'front & back' : 'front'} size={14} color="#5b6178" />}
                   {i === n - 1 && n > 1 && <Label x={0} y={20} text="back" size={14} color="#5b6178" />}
                   {overlay && <Label x={0} y={38} text={`[${i}]`} size={14} color="#5b6178" />}
-                  {picked === id && line && (
-                    <Label x={0} y={overlay ? 54 : 38} text={`joined at line ${line}`} size={14} color={TONE.compare} />
-                  )}
                 </g>
               )}
             </Mover>

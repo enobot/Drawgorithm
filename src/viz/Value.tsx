@@ -27,7 +27,15 @@ export function ValueText({
     case 'number':
       return <span className={`text-navy-100 tabular-nums ${className}`}>{formatSnap(v, heap)}</span>;
     case 'string':
-      return <span className={`text-teal-200 ${className}`}>“{v.v}”</span>;
+      return (
+        <span
+          className={`text-teal-200 ${className}`}
+          title={v.len ? `${v.len.toLocaleString('en-US')} characters; the first ${v.v.length} are shown` : undefined}
+        >
+          “{v.v}
+          {v.len ? '…' : ''}”
+        </span>
+      );
     case 'boolean':
       return <span className={`text-violet-200 ${className}`}>{String(v.v)}</span>;
     case 'null':

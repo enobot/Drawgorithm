@@ -13,7 +13,8 @@ export interface SourceLoc {
 
 export type ValueSnap =
   | { t: 'number'; v: number }
-  | { t: 'string'; v: string }
+  /** Long strings keep only their first characters in a step; `len` is then the full length. */
+  | { t: 'string'; v: string; len?: number }
   | { t: 'boolean'; v: boolean }
   | { t: 'null' }
   | { t: 'undefined' }

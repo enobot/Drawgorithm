@@ -222,7 +222,11 @@ export function ListView({ diagram, heap, labels, current, written, created, hig
               >
                 {tags.length > 0 && (
                   <div className="absolute bottom-full left-0 mb-1 flex flex-col items-center" style={{ width: b.w - PTR_W }}>
-                    <div className="flex gap-1 whitespace-nowrap">
+                    <div
+                      className="flex gap-1 whitespace-nowrap"
+                      // Centered over the node, but never starting left of the drawing, where it couldn't be scrolled to.
+                      style={{ transform: `translateX(max(0px, calc(50% - ${b.x + (b.w - PTR_W) / 2 - 4}px)))` }}
+                    >
                       {tags.map((t) => (
                         <NameTag key={`${t.frame}-${t.name}`} name={t.name} faint={!t.active} solid />
                       ))}

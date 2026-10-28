@@ -29,7 +29,8 @@ export function formatSnap(v: ValueSnap | undefined, heap: Heap, depth = 0): str
     case 'number':
       return Object.is(v.v, -0) ? '0' : String(v.v);
     case 'string':
-      return JSON.stringify(v.v);
+      // A long string arrives shortened (see engine/snapshot.ts); say so.
+      return v.len ? `${JSON.stringify(v.v)}… (${v.len.toLocaleString('en-US')} characters)` : JSON.stringify(v.v);
     case 'boolean':
       return String(v.v);
     case 'null':

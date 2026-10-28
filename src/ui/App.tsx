@@ -5,6 +5,7 @@ import { Group, Panel, Separator, useDefaultLayout, usePanelRef } from 'react-re
 import { AccountButton, AuthDialog } from '../auth/AuthUI';
 import { authClient } from '../auth/client';
 import { connectAuth } from '../auth/store';
+import { markSince } from '../diagnostics';
 import { withoutDeepLink, type Pane } from '../state/deepLink';
 import { canAutoRun } from '../state/live';
 import { currentWork, displayedRun, useStore } from '../state/store';
@@ -41,6 +42,9 @@ function liveFailure(message: string): LiveResult {
   };
 }
 
+/** When the code last changed, for the edit → drawing timings (see diagnostics.ts). */
+let lastEditAt = 0;
+
 /** Redraws Live Build shortly after typing stops; never sends overlapping requests. */
 function useLiveBuild() {
   const code = useStore((s) => currentWork(s).code);
@@ -50,11 +54,15 @@ function useLiveBuild() {
   const queued = useRef<string | null>(null);
 
   useEffect(() => {
+    lastEditAt = performance.now();
     const send = async (text: string) => {
       busy.current = true;
       try {
         const result = await liveInWorker(text);
-        if (currentWork(useStore.getState()).code === text) setLive(result, text);
+        if (currentWork(useStore.getState()).code === text) {
+          setLive(result, text);
+          markSince('edit-to-live', lastEditAt, result.status);
+        }
       } catch (e) {
         // A stuck worker is terminated; say so instead of waiting forever. The last drawing stays.
         const failed = e instanceof EngineStopped && (e.reason === 'timeout' || e.reason === 'crashed');
@@ -104,7 +112,8 @@ function useAutoRun() {
     if (last.current === key) return;
     const t = window.setTimeout(() => {
       last.current = key;
-      void startRun({ auto: true });
+      const editedAt = lastEditAt;
+      void startRun({ auto: true }).then(() => markSince('edit-to-run', editedAt, useStore.getState().run.status));
     }, 250);
     return () => window.clearTimeout(t);
   }, [autoRun, live, code, inputsKey, startRun]);

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { checkExercise, type CaseResult } from '../practice/check';
 import { FOUNDATIONS, LESSONS } from '../practice/foundations';
 import type { Exercise } from '../practice/schema';
 import { currentWork, useStore } from '../state/store';
-import { checkInWorker } from '../worker/client';
+import { cancelCheck, checkInWorker } from '../worker/client';
 
 function List({ title, items }: { title: string; items: string[] }) {
   return (
@@ -45,9 +45,22 @@ function Hints({ hints }: { hints: string[] }) {
 function CheckTests({ exercise }: { exercise: Exercise }) {
   const code = useStore((s) => currentWork(s).code);
   const [state, setState] = useState<{ code: string; results: CaseResult[] } | 'checking' | null>(null);
+  // One check at a time: leaving the exercise cancels it, so its results can't land later.
+  const current = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      current.current?.abort();
+      cancelCheck();
+    },
+    [],
+  );
   const run = async () => {
+    current.current?.abort();
+    const controller = new AbortController();
+    current.current = controller;
     setState('checking');
-    const results = await checkExercise(exercise, code, checkInWorker);
+    const results = await checkExercise(exercise, code, checkInWorker, controller.signal);
+    if (controller.signal.aborted || results === null) return;
     setState({ code, results });
   };
   const results = state && state !== 'checking' ? state.results : null;

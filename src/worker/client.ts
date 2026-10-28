@@ -9,9 +9,16 @@ const LIVE_TIME_LIMIT_MS = 1500;
 export class EngineStopped extends Error {
   /** superseded: a newer request (or an edit) made this one obsolete. */
   reason: 'stopped' | 'timeout' | 'crashed' | 'superseded';
-  constructor(reason: EngineStopped['reason'], message: string) {
+  /**
+   * For 'crashed': true when the worker itself died (an error event), false when the engine
+   * threw while running the code and reported it. A reported failure is deterministic: the
+   * same code and input fail the same way, so it is never worth retrying.
+   */
+  workerDied: boolean;
+  constructor(reason: EngineStopped['reason'], message: string, workerDied = false) {
     super(message);
     this.reason = reason;
+    this.workerDied = workerDied;
   }
 }
 
@@ -31,7 +38,7 @@ class WorkerSlot {
         p.resolve(e.data);
       });
       this.worker.addEventListener('error', (e) => {
-        this.abort(new EngineStopped('crashed', `The engine worker crashed: ${e.message || 'unknown error'}`));
+        this.abort(new EngineStopped('crashed', `The engine worker crashed: ${e.message || 'unknown error'}`, true));
       });
     }
     return this.worker;
@@ -90,6 +97,11 @@ export async function checkInWorker(request: RunRequest): Promise<RunResult> {
   if (res.type === 'crash') throw new EngineStopped('crashed', res.message);
   if (res.type !== 'run') throw new EngineStopped('crashed', 'Unexpected engine response.');
   return res.result;
+}
+
+/** Abandons an unfinished test check (the learner left the exercise or started a new check). */
+export function cancelCheck(): void {
+  if (checkSlot.busy) checkSlot.abort(new EngineStopped('superseded', 'This check was cancelled.'));
 }
 
 export function stopRun(): void {

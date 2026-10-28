@@ -47,7 +47,7 @@ export function setupProblem(setup: AuthSetup): string | null {
   if (setup.ok) return null;
   switch (setup.reason) {
     case 'missing':
-      return 'Sign-in is off: add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env.local, then restart the dev server.';
+      return 'Sign-in is off: add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY (or VITE_SUPABASE_ANON_KEY) to .env.local, then restart the dev server.';
     case 'bad-url':
       return 'Sign-in is off: VITE_SUPABASE_URL must be your project URL, like https://abcd1234.supabase.co.';
     case 'secret-key':

@@ -26,6 +26,8 @@ describe('settings', () => {
 
   it('stays off when a value is missing or the URL is not https', () => {
     expect(readAuthConfig({})).toEqual({ ok: false, reason: 'missing' });
+    // Supabase hands out either key name, so the hint names both.
+    expect(setupProblem(readAuthConfig({}))).toMatch(/VITE_SUPABASE_PUBLISHABLE_KEY.*VITE_SUPABASE_ANON_KEY/);
     expect(readAuthConfig({ VITE_SUPABASE_URL: 'https://a.supabase.co' })).toEqual({ ok: false, reason: 'missing' });
     expect(readAuthConfig({ VITE_SUPABASE_URL: 'not a url', VITE_SUPABASE_ANON_KEY: 'k' })).toEqual({ ok: false, reason: 'bad-url' });
     expect(readAuthConfig({ VITE_SUPABASE_URL: 'http://a.supabase.co', VITE_SUPABASE_ANON_KEY: 'k' })).toEqual({

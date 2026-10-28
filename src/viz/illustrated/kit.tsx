@@ -36,6 +36,7 @@ export function Paper({
   label,
   note,
   overlay,
+  detail,
   children,
 }: {
   width: number;
@@ -45,6 +46,8 @@ export function Paper({
   note: ReactNode;
   /** Technical overlay: the collection state in code terms. */
   overlay?: ReactNode;
+  /** What the person picked in the scene is, in full (values on cards can be shortened). */
+  detail?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -53,7 +56,19 @@ export function Paper({
         {children}
       </svg>
       {overlay && <div className="mt-1 font-mono text-[12.5px] text-[#39405a]">{overlay}</div>}
-      <figcaption className="mt-1 max-w-[42rem] text-[15px] leading-snug" style={{ fontFamily: HAND }}>
+      {/* Only for scenes that let you pick something. Announced when it changes, so the full value is read aloud too. */}
+      {detail !== undefined && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-1 min-h-[1.25rem] max-w-[min(42rem,calc(100cqw_-_4.5rem))] text-[15px] font-semibold text-[#28304a]"
+          style={{ fontFamily: HAND }}
+        >
+          {detail}
+        </p>
+      )}
+      {/* Text wraps within the visible board (the panel's width less padding and a scrollbar), so a scene wider than a phone doesn't push it off screen. */}
+      <figcaption className="mt-1 max-w-[min(42rem,calc(100cqw_-_4.5rem))] text-[15px] leading-snug" style={{ fontFamily: HAND }}>
         {note}
       </figcaption>
     </figure>

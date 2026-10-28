@@ -330,9 +330,9 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
             <div className="pt-2">
               <Cells
                 items={[...s].map((ch) => ({ t: 'string' as const, v: ch }))}
-                total={s.length}
+                total={(v.value.t === 'string' && v.value.len) || s.length}
                 heap={heap}
-                markers={markersFor(frame, v.name, s.length, hints)}
+                markers={markersFor(frame, v.name, (v.value.t === 'string' && v.value.len) || s.length, hints)}
                 reads={active ? (focus.charReads.get(v.name) ?? new Set()) : new Set()}
                 writes={new Set()}
                 role="array"

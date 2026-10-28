@@ -14,5 +14,15 @@ self.addEventListener('message', (event: MessageEvent<EngineRequest>) => {
   } catch (e) {
     res = { id: req.id, type: 'crash', message: e instanceof Error ? e.message : String(e) };
   }
-  self.postMessage(res);
+  try {
+    self.postMessage(res);
+  } catch (e) {
+    // A result the page can't receive (a bug in the trace) fails the same way every time; report
+    // it as an engine failure, which is never retried, rather than let it look like the worker died.
+    self.postMessage({
+      id: req.id,
+      type: 'crash',
+      message: `The result could not be sent to the page: ${e instanceof Error ? e.message : String(e)}`,
+    });
+  }
 });

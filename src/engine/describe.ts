@@ -1,5 +1,5 @@
 // Turning runtime values into text: for explanations, console.log and JS string conversion.
-import { ClassValue, Closure, NativeFn, ObjRecord, isListNode, isTreeNode, type Value } from './values';
+import { ClassValue, Closure, NativeFn, ObjRecord, isListNode, isTreeNode, objectKeys, type Value } from './values';
 
 export interface NodeNamer {
   /** "node 5", or "node 5 (#12)" when several nodes share the value 5. */
@@ -41,7 +41,9 @@ export function fmt(v: Value, namer: NodeNamer, depth = 0): string {
     return `Set {${items.join(', ')}}`;
   }
   if (v instanceof ObjRecord) {
-    const items = [...v.props].slice(0, 4).map(([k, x]) => `${k}: ${fmt(x, namer, depth + 1)}`);
+    const items = objectKeys(v)
+      .slice(0, 4)
+      .map((k) => `${k}: ${fmt(v.props.get(k), namer, depth + 1)}`);
     if (v.props.size > 4) items.push('…');
     const prefix = v.className && v.className !== 'Object' ? `${v.className} ` : '';
     return `${prefix}{${items.join(', ')}}`;
@@ -98,7 +100,7 @@ export function inspect(v: Value, depth = 0, seen = new Set<unknown>()): string 
     const items = [...v].map((x) => inspect(x, depth + 1, seen));
     out = `Set(${v.size}) ${items.length ? `{ ${items.join(', ')} }` : '{}'}`;
   } else {
-    const items = [...v.props].map(([k, x]) => `${k}: ${inspect(x, depth + 1, seen)}`);
+    const items = objectKeys(v).map((k) => `${k}: ${inspect(v.props.get(k), depth + 1, seen)}`);
     const prefix = v.className && v.className !== 'Object' ? `${v.className} ` : '';
     out = `${prefix}${items.length ? `{ ${items.join(', ')} }` : '{}'}`;
   }
