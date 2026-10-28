@@ -47,25 +47,34 @@ interface Spot {
   y: number;
 }
 
-/** Right hand, where a person's `next` rope starts. */
-const hand = (p: Spot) => ({ x: p.x + 20, y: p.y - 40 });
+/**
+ * Which way a person faces: toward the person their `next` points at (right when it is
+ * null, themselves, or straight above or below). They hold the rope in the hand on that side.
+ */
+const facingOf = (from: Spot, to: Spot | null): 1 | -1 => (to && to.x < from.x ? -1 : 1);
 
 /**
- * The rope from a person's right hand to the person their `next` points at, or hanging
- * loose with a "null" tag. Every rope is one cubic curve, so a re-tied rope swings smoothly.
+ * The rope from the hand a person faces with to the side of the person their `next` points
+ * at that faces back, or hanging loose with a "null" tag. A rope to the left is the mirror
+ * image of one to the right, so ropes never loop around anyone's body. Every rope is one
+ * cubic curve, so a re-tied rope swings smoothly to its new target.
  */
 function ropePath(from: Spot, to: Spot | null): string {
-  const s = hand(from);
-  if (!to) return `M ${s.x} ${s.y} C ${s.x + 6} ${s.y + 14} ${s.x + 10} ${s.y + 22} ${s.x + 8} ${s.y + 32}`;
-  const e = { x: to.x - 16, y: to.y - 38 };
-  if (from.y === to.y && to.x - from.x === COL) return `M ${s.x} ${s.y} C ${s.x + 30} ${s.y + 24} ${e.x - 30} ${e.y + 24} ${e.x} ${e.y}`;
+  const dir = facingOf(from, to);
+  const s = { x: from.x + 20 * dir, y: from.y - 40 };
+  if (!to) return `M ${s.x} ${s.y} C ${s.x + 6 * dir} ${s.y + 14} ${s.x + 10 * dir} ${s.y + 22} ${s.x + 8 * dir} ${s.y + 32}`;
+  const e = { x: to.x - 16 * dir, y: to.y - 38 };
+  if (from.y === to.y && Math.abs(to.x - from.x) === COL) {
+    // The next person along: a short rope sagging between neighbors.
+    return `M ${s.x} ${s.y} C ${s.x + 30 * dir} ${s.y + 24} ${e.x - 30 * dir} ${e.y + 24} ${e.x} ${e.y}`;
+  }
   if (from.y === to.y) {
-    // Backward, onto itself, or skipping people: under everyone's feet and up to the target.
+    // Skipping people (or onto itself): under the feet of everyone in between, up to the target.
     const dip = from.y + 34 + Math.min(26, Math.abs(e.x - s.x) * 0.05);
-    return `M ${s.x} ${s.y} C ${s.x + 34} ${dip} ${e.x - 34} ${dip} ${e.x} ${e.y}`;
+    return `M ${s.x} ${s.y} C ${s.x + 34 * dir} ${dip} ${e.x - 34 * dir} ${dip} ${e.x} ${e.y}`;
   }
   const reach = Math.max(70, Math.abs(e.x - s.x) * 0.4);
-  return `M ${s.x} ${s.y} C ${s.x + reach} ${s.y} ${e.x - reach} ${e.y} ${e.x} ${e.y}`;
+  return `M ${s.x} ${s.y} C ${s.x + reach * dir} ${s.y} ${e.x - reach * dir} ${e.y} ${e.x} ${e.y}`;
 }
 
 /** A singly linked list as people holding one-way ropes: each rope is that node's `next`. */
@@ -182,7 +191,9 @@ export function ListScene({
           const p = spot(id);
           if (!p) return null;
           const hot = written.some((w) => w.objId === id && w.key === nextOf(id));
-          const isNull = nextIds.get(id) === null;
+          const toId = nextIds.get(id) ?? null;
+          const isNull = toId === null;
+          const facing = facingOf(p, toId !== null ? spot(toId) : null);
           const tags = labels.get(id) ?? [];
           const tone: Tone =
             current === id ? 'current' : hot ? 'changed' : created.has(id) ? 'changed' : highlighted?.has(id) ? 'compare' : 'idle';
@@ -197,11 +208,12 @@ export function ListScene({
                   aria-label={`node ${label(id)}${names.length ? `, referenced by ${names.join(', ')}` : ''}, ${nextOf(id)} ${isNull ? 'is null' : `points to node ${label(nextIds.get(id)!)}`}`}
                 >
                   <title>{`node ${label(id)}`}</title>
-                  <StickFigure pose={hot ? 'raise' : 'reach'} tone={tone} walking={walking} filter={sketch}>
+                  <StickFigure pose={hot ? 'raise' : 'reach'} tone={tone} walking={walking} facing={facing} filter={sketch}>
                     {/* Worn like a badge: this person's hands are busy with the rope. */}
                     <ValueCard text={label(id)} tone={tone} held={false} />
                   </StickFigure>
-                  {isNull && <Label x={28} y={6} text="null" size={15} color="#5b6178" />}
+                  {/* Beside the loose end of the rope, above the ground line. */}
+                  {isNull && <Label x={34} y={-6} text="null" size={15} color="#5b6178" anchor="start" />}
                   {selected === id && (
                     <ellipse cx={0} cy={-30} rx={34} ry={46} fill="none" stroke={INK} strokeWidth={1.6} strokeDasharray="4 5" />
                   )}
