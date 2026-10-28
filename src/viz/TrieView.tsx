@@ -142,7 +142,8 @@ export function TrieView({ model, heap, tags, activity, created }: TrieViewProps
                     <span className="text-[16px]">{n.char}</span>
                   )}
                   {counter && (
-                    <span className="absolute -right-2.5 -top-2 rounded-full bg-navy-700 px-1 text-[9.5px] font-bold leading-4 text-navy-100 shadow-[inset_0_0_0_1px_rgb(166_181_210/0.5)]">
+                    // Low enough to clear a variable tag above the node.
+                    <span className="absolute -right-2.5 -top-1 rounded-full bg-navy-700 px-1 text-[9.5px] font-bold leading-4 text-navy-100 shadow-[inset_0_0_0_1px_rgb(166_181_210/0.5)]">
                       {formatSnap(counter.value, heap, 2)}
                     </span>
                   )}

@@ -2,7 +2,7 @@
 
 Write code for coding-interview style problems in the language you choose and see what it does. **Build** redraws the structure your top-level code creates as you type. **Run** records your code's real execution and plays it back step by step: source line, variables, data structures, call stack, explanation and output stay in sync.
 
-Languages: JavaScript runs today. TypeScript, Python, Java and C++ are planned through language adapters that produce the same trace; the Language menu marks each one as unavailable until its adapter works and is tested. See [docs/COVERAGE.md](docs/COVERAGE.md).
+Languages: JavaScript and Python run today. Python is real CPython 3.14 (Pyodide, compiled to WebAssembly) in its own worker, traced line by line into the same drawings; the first Python run downloads about 10 MB from this site. TypeScript, Java and C++ are planned; the Language menu marks each one as unavailable until its adapter works and is tested. See [docs/COVERAGE.md](docs/COVERAGE.md).
 
 Drawgorithms is an independent project. It is not affiliated with LeetCode. The built-in problems are written for this project.
 
@@ -47,11 +47,15 @@ The Visual panel has two picture styles, switchable at any time without changing
 
 Trees, maps, sets, stacks, grids, heaps, deques, graphs, tries and union-find forests are drawn the technical way in both styles for now. Item identities in a queue come from the trace's recorded adds and removes; after an operation that reorders items without recording how (`sort`, `splice`), the scene starts over with a new arrangement instead of inventing movements.
 
+## Learn: concept lessons
+
+The **Learn** button in the Problem panel opens 34 lessons, from the basics (arrays, loops, strings, sets, maps, grids, linked lists, stacks, queues, recursion, sorting, bits) through the core patterns (two pointers, sliding windows, prefix sums, binary search, fast and slow pointers, tree traversals, heaps, monotonic stacks, greedy choices, intervals) to the advanced ones (graph search, topological order, Dijkstra, union-find, tries, backtracking, memoization, 1-D and 2-D dynamic programming, divide and conquer). Each lesson explains the idea, opens a short demo in the editor that runs on the board step by step, says what to watch for in the drawing, lists the kinds of interview questions with the same structure, and links to the practice exercises that use it. The demos are original problems with the same structure as classic interview questions. The demo is ordinary code in the editor: the drawing follows any edit, and Reset brings the demo back. `src/learn/lessons.test.ts` runs every demo case, checks each output against an independent computation, and checks that the drawings a lesson promises (call tree, bits, heap, graph, forest, trie) really appear.
+
 ## Practice: Drawgorithm Foundations 75
 
 An optional, original practice collection (the **Practice** button in the Problem panel). It is written for Drawgorithms; it is not an official collection of any platform and makes no claim about which questions interviews use most. All 75 exercises are available. An exercise becomes available only when its statement, formats, constraints, rules (empty input, duplicates, ties, ordering, mutation), examples, additional tests, starter code, progressive hints, reference solution with complexity and assumptions, and visualization are written, and `src/practice/foundations.test.ts` verifies them: the reference passes every case in the interpreter, every expected output matches an independent computation, the starter runs (and fails at least one case), and every drawing it needs is supported.
 
-Opening an exercise loads its examples as cases and its starter code into the editor. **Check all tests** runs the code in the editor on the examples and the additional tests in a separate engine worker (same limits as Run) and reports each case as passed, failed (expected vs. actual) or error. **Walk through the answer** (under **Stuck?**) plays the authored reference solution on the selected example on the board, from its first step, with how it works: the editor panel shows the answer read-only, the board and every step say it is the authored answer and not the learner's code, and picking another example replays it there. The learner's code is never changed (it isn't even put in the editor, so its undo history stays as it was); **Back to my code** returns to it and runs it again, and a walkthrough never becomes the "previous valid state" shown after a failed run of the learner's code. The reference solution's text also sits behind its own reveal. Prerequisite lessons are named but not written yet. Starter code exists for JavaScript, the only language the interpreter runs today.
+Opening an exercise loads its examples as cases and its starter code into the editor. **Check all tests** runs the code in the editor on the examples and the additional tests in a separate engine worker (same limits as Run) and reports each case as passed, failed (expected vs. actual) or error. **Walk through the answer** (under **Stuck?**) plays the authored reference solution on the selected example on the board, from its first step, with how it works: the editor panel shows the answer read-only, the board and every step say it is the authored answer and not the learner's code, and picking another example replays it there. The learner's code is never changed (it isn't even put in the editor, so its undo history stays as it was); **Back to my code** returns to it and runs it again, and a walkthrough never becomes the "previous valid state" shown after a failed run of the learner's code. The reference solution's text also sits behind its own reveal. Each exercise links to the lessons it builds on (under **Before this**). Starter code and reference solutions are written in JavaScript; in Python an exercise starts from a stub for the same function, and Check all tests runs the Python code.
 
 ## Screen sizes
 
@@ -66,6 +70,16 @@ Switching tabs, rotating or resizing keeps the code, the editor's cursor and und
 Tested so far in Chromium's device emulation (375×812 portrait, 812×375 landscape, 768×1024, 1366×768). Not yet tested on a real iPhone (Safari) or Android phone; [docs/PHONE-TESTING.md](docs/PHONE-TESTING.md) explains how to open the dev server on a phone and what to check.
 
 Motion was checked frame by frame in headless Edge: people in the queue scene glide to their new places with swinging legs that stop when they arrive, list ropes swing to their new target while the nodes stay put, and with the reduced-motion setting emulated (the same media query the OS sets) everything changes at once, with no walking.
+
+## Python
+
+Pick **Python** in the Language menu. Each problem keeps its JavaScript and its Python code separately, so switching back and forth loses nothing; a problem without Python code yet starts from a stub for its function and inputs (`TreeNode`/`ListNode` are provided, and `class Solution` methods and snake_case names are found too). Run, Run as I type, the inputs, Check all tests and the drawings work the same way. What differs:
+
+- Python reports lines, calls and returns, so each step is a line that ran and what it changed (found by comparing the step with the one before). Values that were only read or compared are not highlighted, and checks don't say which way they went.
+- Live Build checks Python's syntax as you type (with CPython's own parser) but draws only JavaScript for now.
+- Format Code is JavaScript only. The answer walkthrough plays the authored JavaScript reference.
+- The same limits apply (2,000 steps, 200 nested calls, the trace size cap, 1,000 output lines, 6 seconds). Loading Python has its own two-minute limit and doesn't count toward a run. A failed download or a page policy that blocks WebAssembly is reported at once.
+- The code runs in a worker without the page; `import js`/`pyodide` is refused. This is a sandbox for your own code in your own browser, not a security boundary for running other people's code.
 
 ## Supported JavaScript (the first language adapter)
 
@@ -83,7 +97,9 @@ Safety limits per run: 2,000 recorded steps, 2,000,000 operations, 200 nested ca
 src/
   trace/types.ts   Trace contract: steps (immutable snapshots of frames + heap), effects, errors, Live Build results
   engine/          JavaScript adapter: acorn parser, tree-walking interpreter, built-ins, snapshots, limits, Run and Live Build
-  worker/          Runs the engine in Web Workers (one for Run, one for Live Build); time limit and Stop terminate the worker
+  engine/python/   Python adapter: tracer.py (sys.settrace → the same trace, plus static hints from Python's ast) and its page side
+  worker/          Runs the engines in Web Workers (JavaScript: one for Run, one for Live Build; Python: one shared worker that keeps
+                   Pyodide loaded); time limit and Stop terminate the worker
   viz/             Renderers (blocks, arrays/strings with pointers, grids, maps, sets, objects, trees, linked lists, call stack,
                    heaps, deques, graphs, tries, union-find forests)
                    and pure analysis (tree layout, cycles/shared/detached nodes, traversal state, index pointers)
@@ -92,6 +108,7 @@ src/
   editor/          Monaco setup and the Prettier formatter
   problems/        Built-in examples, pasted-problem parsing, expected-vs-actual comparison
   practice/        Foundations 75: exercise schema, catalog, authored exercises, test checker
+  learn/           Concept lessons: content, verified demos, opened as problems
   viz/illustrated/ Illustrated scenes (queue, linked list, shelves) and their sketch kit
 ```
 

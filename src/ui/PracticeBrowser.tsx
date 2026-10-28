@@ -53,7 +53,8 @@ export function PracticeBrowser({ onClose }: { onClose: () => void }) {
             </h2>
             <p className="mt-1 text-[13px] leading-snug text-navy-300">
               An original practice set written for Drawgorithms. {ready} of {FOUNDATIONS.length} exercises are ready: each has tested
-              examples, hints, a reference solution and a drawing the board supports. The rest are planned and can't be opened yet.
+              examples, hints, a reference solution with a walkthrough, and a drawing the board supports.
+              {ready < FOUNDATIONS.length && " The rest are planned and can't be opened yet."}
             </p>
           </div>
           <button ref={closeRef} type="button" className="btn-quiet shrink-0" onClick={onClose}>

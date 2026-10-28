@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import { setFormatListener } from '../editor/monaco';
 import { LANGUAGES } from '../languages';
 import { PROBLEMS } from '../problems/catalog';
-import { CUSTOM_ID, currentWork, displayedRun, problemFor, shownCode, useStore } from '../state/store';
+import { starterIn } from '../problems/starters';
+import { CUSTOM_ID, displayedRun, problemFor, shownCode, shownLanguage, useStore, workLanguage, currentWork } from '../state/store';
+import type { LanguageId } from '../languages';
 import { CodeEditor, type EditorMarks } from './CodeEditor';
 
 function useEditorMarks(): EditorMarks {
@@ -79,8 +81,12 @@ function SupportedJs() {
     <details className="text-[12.5px] text-navy-300">
       <summary className="cursor-pointer select-none font-semibold hover:text-navy-100">Supported languages and features</summary>
       <p className="mt-1.5 leading-relaxed">
-        Languages that run today: JavaScript. TypeScript, Python, Java and C++ are planned; the Language menu shows each one's status. For
-        JavaScript:
+        Languages that run today: JavaScript and Python. TypeScript, Java and C++ are planned; the Language menu shows each one's status.
+      </p>
+      <p className="mt-1.5 leading-relaxed">
+        Python is real CPython 3.14 (Pyodide) in a sandboxed worker: the whole language and standard library (collections, heapq, math, …),
+        TreeNode(val, left, right) and ListNode(val, next), and class Solution. Steps show each line and what it changed; unlike JavaScript,
+        they can't show values that were only read or compared. The first run downloads about 10 MB. For JavaScript:
       </p>
       <p className="mt-1.5 leading-relaxed">
         let, const, var, functions, arrow functions, recursion, classes (no extends), if/else, switch, for, for…of, for…in, while, do…while,
@@ -101,6 +107,9 @@ export function EditorPanel() {
   const code = useStore((s) => currentWork(s).code);
   const walkthrough = useStore((s) => (s.walkthrough?.problemId === s.problemId ? s.walkthrough : null));
   const endWalkthrough = useStore((s) => s.endWalkthrough);
+  const language = useStore((s) => workLanguage(currentWork(s)));
+  const editorLanguage = useStore(shownLanguage);
+  const setLanguage = useStore((s) => s.setLanguage);
   const runStatus = useStore((s) => s.run.status);
   const hintDismissed = useStore((s) => s.hintDismissed);
   const reveal = useStore((s) => s.reveal);
@@ -129,7 +138,7 @@ export function EditorPanel() {
   const marks = useEditorMarks();
   const problem = problemFor(problemId, custom);
   const running = runStatus === 'running';
-  const edited = code !== problem.starter;
+  const edited = code !== starterIn(problem, language);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -160,8 +169,8 @@ export function EditorPanel() {
           type="button"
           className="btn-quiet"
           onClick={requestFormat}
-          disabled={!!walkthrough}
-          title="Format Code with Prettier (Shift+Alt+F)"
+          disabled={!!walkthrough || language !== 'javascript'}
+          title={language === 'javascript' ? 'Format Code with Prettier (Shift+Alt+F)' : 'Formatting is available for JavaScript only.'}
         >
           Format Code
         </button>
@@ -180,8 +189,9 @@ export function EditorPanel() {
         >
           Language
           <select
-            value="javascript"
-            onChange={() => {}}
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as LanguageId)}
+            disabled={!!walkthrough}
             className="rounded-md border border-navy-600 bg-navy-900 px-1.5 py-1 text-[12.5px] text-navy-100 hover:border-navy-400"
           >
             {LANGUAGES.map((l) => (
@@ -255,6 +265,7 @@ export function EditorPanel() {
             marks={marks}
             reveal={reveal}
             formatNonce={formatNonce}
+            language={editorLanguage === 'python' ? 'python' : 'javascript'}
           />
         )}
       </div>
@@ -268,7 +279,8 @@ export function EditorPanel() {
             </span>
           ) : live?.error ? (
             <span className="text-rose-300">
-              Line {live.error.loc?.line}: {live.error.message}
+              {live.error.loc ? `Line ${live.error.loc.line}: ` : ''}
+              {live.error.message}
             </span>
           ) : (
             <span className="text-navy-400">Ctrl+Enter runs the code. ← → step through it when the editor isn’t focused.</span>

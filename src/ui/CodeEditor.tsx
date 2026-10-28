@@ -26,6 +26,8 @@ interface Props {
   reveal: { line: number; nonce: number } | null;
   /** Bumped to run Format Document. */
   formatNonce: number;
+  /** Syntax colors for the code's language. */
+  language: 'javascript' | 'python';
 }
 
 // The text model outlives the editor widget, so switching layouts (rotating a tablet,
@@ -38,7 +40,7 @@ function modelFor(value: string): monaco.editor.ITextModel {
   return sharedModel;
 }
 
-export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks, reveal, formatNonce }: Props) {
+export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks, reveal, formatNonce, language }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const decorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
@@ -93,6 +95,11 @@ export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks
     // The editor is created once; later value changes are applied below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const model = editorRef.current?.getModel();
+    if (model && model.getLanguageId() !== language) monaco.editor.setModelLanguage(model, language);
+  }, [language]);
 
   // External changes (Reset, Load example) replace the text but stay undoable.
   useEffect(() => {

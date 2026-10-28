@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { compareRun } from '../problems/compare';
-import { displayedRun, problemFor, runFailed, shownCode, useStore, type RunState, type Walkthrough } from '../state/store';
+import { displayedRun, problemFor, runFailed, shownCode, shownLanguage, useStore, type RunState, type Walkthrough } from '../state/store';
+import { pythonRuntimeState } from '../worker/client';
 import type { EngineError, Step, StepKind } from '../trace/types';
 import { buildTraversalIndex, traversalAt } from '../viz/analysis';
 import { CallStack, IllustratedNote, ResultBanner, Structures, type BoardContext } from '../viz/Board';
@@ -155,6 +156,7 @@ export function RunView() {
   const selectNode = useStore((s) => s.selectNode);
   const custom = useStore((s) => s.custom);
   const code = useStore(shownCode);
+  const loadingPython = useStore((s) => shownLanguage(s) === 'python') && pythonRuntimeState() !== 'ready';
   const walkthrough = useStore((s) => (s.walkthrough?.problemId === s.problemId ? s.walkthrough : null));
   const startRun = useStore((s) => s.startRun);
   const details = useStore((s) => s.showDetails);
@@ -194,7 +196,9 @@ export function RunView() {
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
           {run.status === 'running' ? (
             <>
-              <p className="text-navy-200">Running your code…</p>
+              <p className="text-navy-200">
+                {loadingPython ? 'Loading Python (the first run downloads about 10 MB)…' : 'Running your code…'}
+              </p>
               <button type="button" className="btn bg-rose-400 text-navy-950 hover:bg-rose-300" onClick={() => useStore.getState().stop()}>
                 Stop
               </button>
@@ -275,7 +279,11 @@ export function RunView() {
           )}
         </div>
       )}
-      {running && !stale && <p className="mx-4 mt-3 text-[13px] text-navy-300">Running your code…</p>}
+      {running && !stale && (
+        <p className="mx-4 mt-3 text-[13px] text-navy-300">
+          {loadingPython ? 'Loading Python (the first run downloads about 10 MB)…' : 'Running your code…'}
+        </p>
+      )}
       {/* Shown for the whole run, not per step, so stepping never shifts the drawing. */}
       {!running && !stale && run.auto && display!.kind === 'current' && (
         <p className="mx-4 mt-3 text-[12.5px] text-navy-300 short:hidden">Ran automatically after your last edit.</p>

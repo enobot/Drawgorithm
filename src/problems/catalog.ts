@@ -1,5 +1,6 @@
 // Built-in examples. Descriptions are written for Drawgorithms; the starter code
 // is ordinary JavaScript that the interpreter runs exactly as edited.
+import { lessonProblemById } from '../learn/problems';
 import { practiceProblemById } from '../practice/problems';
 import type { ExpectSpec, InputKind } from '../trace/types';
 
@@ -279,5 +280,5 @@ export const DEFAULT_PROBLEM_ID = 'tree-build';
 
 /** A built-in example, or an available Foundations 75 exercise. */
 export function problemById(id: string): ProblemDef | undefined {
-  return PROBLEMS.find((p) => p.id === id) ?? practiceProblemById(id);
+  return PROBLEMS.find((p) => p.id === id) ?? practiceProblemById(id) ?? lessonProblemById(id);
 }

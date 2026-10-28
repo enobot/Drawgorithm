@@ -11,7 +11,10 @@ import { ListView } from '../viz/ListView';
 import { TreeView } from '../viz/TreeView';
 import { ValueText } from '../viz/Value';
 import { previewHeap } from '../viz/preview';
+import { isLessonId } from '../learn/problems';
 import { isPracticeId } from '../practice/problems';
+import { LessonBrowser } from './LessonBrowser';
+import { LessonPanel } from './LessonPanel';
 import { PracticeBrowser } from './PracticeBrowser';
 import { PracticePanel } from './PracticePanel';
 
@@ -193,6 +196,7 @@ export function ProblemPanel() {
   const removeInput = useStore((s) => s.removeInput);
   const hints = useStore((s) => (s.live.result?.status === 'pending' ? s.live.lastDrawn?.hints : s.live.result?.hints));
   const [practiceOpen, setPracticeOpen] = useState(false);
+  const [lessonsOpen, setLessonsOpen] = useState(false);
   const p = problemFor(problemId, custom);
   const isCustom = problemId === CUSTOM_ID;
   const expectedOk = !work.expectedText.trim() || parseValue(work.expectedText).ok;
@@ -212,9 +216,13 @@ export function ProblemPanel() {
   return (
     <div className="flex h-full flex-col gap-5 overflow-y-auto p-4">
       <header className="flex flex-col gap-2">
-        <div className="flex items-start justify-between gap-2">
+        {/* The buttons wrap under the title when the panel is too narrow for both. */}
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="text-[19px] font-bold leading-tight text-navy-100">{p.title}</h2>
-          <div className="flex shrink-0 gap-1">
+          <div className="flex flex-wrap gap-1">
+            <button type="button" className="btn-quiet h-7 px-2 text-[12px]" onClick={() => setLessonsOpen(true)}>
+              Learn
+            </button>
             <button type="button" className="btn-quiet h-7 px-2 text-[12px]" onClick={() => setPracticeOpen(true)}>
               Practice
             </button>
@@ -366,7 +374,7 @@ export function ProblemPanel() {
 
       {p.explanation && (
         <section className="flex flex-col gap-1.5">
-          <h3 className="section-title">How the starter code works</h3>
+          <h3 className="section-title">{isLessonId(problemId) ? 'How the demo works' : 'How the starter code works'}</h3>
           <p className="text-[14px] leading-relaxed text-navy-200">{p.explanation}</p>
         </section>
       )}
@@ -383,7 +391,9 @@ export function ProblemPanel() {
       )}
 
       {isPracticeId(problemId) && <PracticePanel exerciseId={problemId} />}
+      {isLessonId(problemId) && <LessonPanel problemId={problemId} />}
       {practiceOpen && <PracticeBrowser onClose={() => setPracticeOpen(false)} />}
+      {lessonsOpen && <LessonBrowser onClose={() => setLessonsOpen(false)} />}
     </div>
   );
 }

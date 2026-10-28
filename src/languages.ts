@@ -18,7 +18,12 @@ export const LANGUAGES: LanguageInfo[] = [
     available: false,
     note: 'Not available yet: needs a type-erasing adapter that keeps line positions.',
   },
-  { id: 'python', label: 'Python', available: false, note: 'Not available yet: planned adapter runs real CPython (Pyodide) in a worker.' },
+  {
+    id: 'python',
+    label: 'Python',
+    available: true,
+    note: 'Real CPython 3.14 (Pyodide) in a sandboxed worker, traced line by line. The first run downloads about 10 MB.',
+  },
   { id: 'java', label: 'Java', available: false, note: 'Not available yet: needs a server-side sandbox to compile and trace.' },
   { id: 'cpp', label: 'C++', available: false, note: 'Not available yet: needs a server-side sandbox to compile and trace.' },
 ];

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { lessonProblemId } from '../learn/problems';
 import { checkExercise, type CaseResult } from '../practice/check';
 import { FOUNDATIONS, LESSONS } from '../practice/foundations';
 import type { Exercise } from '../practice/schema';
-import { currentWork, useStore } from '../state/store';
+import { currentWork, useStore, workLanguage } from '../state/store';
 import { cancelCheck, checkInWorker } from '../worker/client';
 
 function List({ title, items }: { title: string; items: string[] }) {
@@ -44,6 +45,7 @@ function Hints({ hints }: { hints: string[] }) {
 /** Runs the code in the editor on every example and additional test, in its own engine worker. */
 function CheckTests({ exercise }: { exercise: Exercise }) {
   const code = useStore((s) => currentWork(s).code);
+  const language = useStore((s) => workLanguage(currentWork(s)));
   const [state, setState] = useState<{ code: string; results: CaseResult[] } | 'checking' | null>(null);
   // One check at a time: leaving the exercise cancels it, so its results can't land later.
   const current = useRef<AbortController | null>(null);
@@ -59,7 +61,7 @@ function CheckTests({ exercise }: { exercise: Exercise }) {
     const controller = new AbortController();
     current.current = controller;
     setState('checking');
-    const results = await checkExercise(exercise, code, checkInWorker, controller.signal);
+    const results = await checkExercise(exercise, code, (req) => checkInWorker(req, language), controller.signal);
     if (controller.signal.aborted || results === null) return;
     setState({ code, results });
   };
@@ -186,9 +188,18 @@ export function PracticePanel({ exerciseId }: { exerciseId: string }) {
       <section className="flex flex-col gap-1.5 text-[13px] leading-snug text-navy-300">
         <h3 className="section-title">What the drawing shows</h3>
         <p>{c.visualization.spec}</p>
-        <p>
-          <strong className="text-navy-200">Before this:</strong> {exercise.prerequisites.map((l) => LESSONS[l]).join('; ')} (lessons are
-          planned, not written yet).
+        <p className="flex flex-wrap items-center gap-1.5">
+          <strong className="text-navy-200">Before this:</strong>
+          {exercise.prerequisites.map((l) => (
+            <button
+              key={l}
+              type="button"
+              className="rounded-md px-1.5 py-0.5 text-teal-200 hover:bg-navy-800"
+              onClick={() => selectProblem(lessonProblemId(l))}
+            >
+              {LESSONS[l]}
+            </button>
+          ))}
         </p>
         {related.length > 0 && (
           <p className="flex flex-wrap items-center gap-1.5">

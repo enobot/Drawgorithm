@@ -10,6 +10,8 @@ self.addEventListener('message', (event: MessageEvent<EngineRequest>) => {
     const adapter = ADAPTERS[req.language];
     if (!adapter) throw new Error(`No adapter for ${req.language}.`);
     if (req.type === 'run') res = { id: req.id, type: 'run', result: adapter.run(req.request) };
+    // The JavaScript interpreter has nothing to load.
+    else if (req.type === 'load') res = { id: req.id, type: 'loaded' };
     else res = { id: req.id, type: 'live', result: adapter.live(req.code) };
   } catch (e) {
     res = { id: req.id, type: 'crash', message: e instanceof Error ? e.message : String(e) };

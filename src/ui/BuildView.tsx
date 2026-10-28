@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useStore } from '../state/store';
+import { shownLanguage, useStore } from '../state/store';
 import { CallStack, FrameContent, IllustratedNote, Structures, type BoardContext } from '../viz/Board';
 import { NO_OVERRIDES, resolveBindings } from '../viz/bindings';
 import { EMPTY_FOCUS } from '../viz/focus';
@@ -21,6 +21,7 @@ export function BuildView() {
   const illustrated = useStore((s) => s.viewStyle !== 'technical');
   const technical = useStore((s) => s.viewStyle !== 'illustrated');
   const revealLine = useStore((s) => s.revealLine);
+  const python = useStore((s) => shownLanguage(s) === 'python');
   const current = live.result;
   const drawn = current?.step ? current : live.lastDrawn;
   const step = drawn?.step ?? null;
@@ -38,7 +39,11 @@ export function BuildView() {
   );
 
   if (!current && !drawn) {
-    return <p className="p-6 text-[14px] text-navy-300">Reading your code…</p>;
+    return (
+      <p className="p-6 text-[14px] text-navy-300">
+        {python ? 'Loading Python to check your code (the first time downloads about 10 MB)…' : 'Reading your code…'}
+      </p>
+    );
   }
 
   const program = step?.frames[0];
@@ -67,6 +72,15 @@ export function BuildView() {
     // On short screens the board keeps a usable height and the whole view scrolls.
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="flex flex-col gap-2 px-4 pt-3">
+        {python && (
+          <div className="rounded-xl border border-navy-600 bg-navy-850 px-3 py-2 text-[13px] text-navy-200">
+            <p className="font-semibold text-navy-100">Live Build draws JavaScript only for now</p>
+            <p className="mt-0.5">Python is checked as you type. Run it to watch it step by step.</p>
+            <button type="button" className="btn-primary mt-2 h-8" onClick={() => void startRun()}>
+              Run
+            </button>
+          </div>
+        )}
         {current?.pending && (
           <div role="status" className="rounded-lg border border-amber-400/60 bg-amber-400/10 px-3 py-2 text-[13px]">
             <p className="font-semibold text-amber-100">Waiting for line {current.pending.line} to finish</p>

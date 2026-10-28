@@ -3,6 +3,8 @@
 import { create } from 'zustand';
 import { DEFAULT_PROBLEM_ID, PROBLEMS, problemById, type ProblemDef } from '../problems/catalog';
 import { parseProblemText, parseValue, starterFor, type ParsedProblem } from '../problems/pasted';
+import { starterIn } from '../problems/starters';
+import type { LanguageId } from '../languages';
 import type { ExpectSpec, InputKind, LiveResult, RunRequest, RunResult } from '../trace/types';
 import { EngineStopped, cancelObsoleteRun, runInWorker, stopRun } from '../worker/client';
 import { readDeepLink, type Pane } from './deepLink';
@@ -17,10 +19,15 @@ export interface InputRow {
 }
 
 export interface Work {
+  /** The code in the editor, in `language`. */
   code: string;
   caseIndex: number;
   inputs: InputRow[];
   expectedText: string;
+  /** Missing in work saved before Python: JavaScript. */
+  language?: LanguageId;
+  /** The code last written in the other languages, kept while switching. */
+  otherCode?: Partial<Record<LanguageId, string>>;
 }
 
 export interface CustomProblem {
@@ -128,6 +135,8 @@ interface Actions {
   setExpected(text: string): void;
   setCustomText(text: string): void;
   setCustomEntry(entry: string): void;
+  /** Switches the editor's language; the code in the other language is kept for switching back. */
+  setLanguage(language: LanguageId): void;
   /** `background` and `auto` run without switching tabs; `auto` marks a run started by a typing pause. */
   startRun(opts?: { background?: boolean; auto?: boolean }): Promise<void>;
   stop(): void;
@@ -316,7 +325,20 @@ export const useStore = create<State & Actions>()((set, get) => ({
   resetCode() {
     const s = get();
     const p = problemFor(s.problemId, s.custom);
-    set({ work: { ...s.work, [s.problemId]: { ...currentWork(s), code: p.starter } } });
+    const w = currentWork(s);
+    set({ work: { ...s.work, [s.problemId]: { ...w, code: starterIn(p, workLanguage(w)) } } });
+  },
+
+  setLanguage(language) {
+    const s = get();
+    const w = currentWork(s);
+    const current = workLanguage(w);
+    if (current === language) return;
+    s.cancelRun();
+    const otherCode = { ...w.otherCode, [current]: w.code };
+    const code = otherCode[language] ?? starterIn(problemFor(s.problemId, s.custom), language);
+    delete otherCode[language];
+    set({ work: { ...s.work, [s.problemId]: { ...w, language, code, otherCode } }, live: { result: null, code: null, lastDrawn: null } });
   },
 
   selectCase(index) {
@@ -413,7 +435,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
     // While running, the previous trace stays paired with the code that produced it.
     set({ run: { ...s.run, status: 'running', message: null, inspectFailed: false, auto: !!opts.auto }, playing: false, ...show });
     try {
-      const result = await runInWorker(request);
+      const result = await runInWorker(request, shownLanguage(s));
       if (token !== latestRun) return;
       const ok = result.status === 'finished';
       set({
@@ -580,6 +602,13 @@ export const useStore = create<State & Actions>()((set, get) => ({
 
 export function currentWork(s: Pick<State, 'problemId' | 'work' | 'custom'>): Work {
   return s.work[s.problemId] ?? freshWork(problemFor(s.problemId, s.custom));
+}
+
+export const workLanguage = (w: Work): LanguageId => w.language ?? 'javascript';
+
+/** The language of the code the editor panel shows: a walkthrough's answer is JavaScript. */
+export function shownLanguage(s: Pick<State, 'problemId' | 'work' | 'custom' | 'walkthrough'>): LanguageId {
+  return s.walkthrough?.problemId === s.problemId ? 'javascript' : workLanguage(currentWork(s));
 }
 
 /** The code the editor panel shows and Run runs: a walkthrough's answer while one is open, otherwise the learner's own. */

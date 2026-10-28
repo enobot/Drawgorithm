@@ -8,7 +8,7 @@ import { connectAuth } from '../auth/store';
 import { markSince } from '../diagnostics';
 import { withoutDeepLink, type Pane } from '../state/deepLink';
 import { canAutoRun } from '../state/live';
-import { currentWork, displayedRun, shownCode, useStore } from '../state/store';
+import { currentWork, displayedRun, shownCode, shownLanguage, useStore } from '../state/store';
 import type { LiveResult } from '../trace/types';
 import { EngineStopped, liveInWorker } from '../worker/client';
 import { EditorPanel } from './EditorPanel';
@@ -48,6 +48,8 @@ let lastEditAt = 0;
 /** Redraws Live Build shortly after typing stops; never sends overlapping requests. */
 function useLiveBuild() {
   const code = useStore(shownCode);
+  // Python's Live Build is a syntax check in the Python worker (it draws nothing yet).
+  const language = useStore(shownLanguage);
   const problemId = useStore((s) => s.problemId);
   const setLive = useStore((s) => s.setLive);
   const busy = useRef(false);
@@ -58,7 +60,7 @@ function useLiveBuild() {
     const send = async (text: string) => {
       busy.current = true;
       try {
-        const result = await liveInWorker(text);
+        const result = await liveInWorker(text, language);
         if (shownCode(useStore.getState()) === text) {
           setLive(result, text);
           markSince('edit-to-live', lastEditAt, result.status);
@@ -88,7 +90,7 @@ function useLiveBuild() {
       else void send(code);
     }, 300);
     return () => window.clearTimeout(t);
-  }, [code, problemId, setLive]);
+  }, [code, problemId, setLive, language]);
 }
 
 /**

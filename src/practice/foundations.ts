@@ -55,6 +55,13 @@ export const LESSONS: Record<string, string> = {
   tries: 'Tries: a tree of prefixes',
   bits: 'Bits and binary numbers',
   matrices: 'Grids and matrices',
+  'fast-slow-pointers': 'Fast and slow pointers',
+  'monotonic-stack': 'Monotonic stacks: the next larger value',
+  intervals: 'Intervals: sorting and merging ranges',
+  'topological-sort': 'Topological order: tasks after what they need',
+  'shortest-paths': 'Shortest paths with weights (Dijkstra)',
+  'dp-2d': 'Dynamic programming on a grid',
+  'divide-and-conquer': 'Divide and conquer: split, solve, combine',
 };
 
 /** Prerequisites for planned exercises, by topic (authored exercises list their own). */
