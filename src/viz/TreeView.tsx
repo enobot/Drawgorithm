@@ -11,9 +11,9 @@ const NODE = 46;
 const R = NODE / 2;
 const LEVEL = 110;
 /** Variable labels sit in one of two rows above a node; the second is used only when the first is taken. */
-const TAG_ROW = 24;
+export const TAG_ROW = 24;
 /** Space kept between labels on the same level. */
-const TAG_GAP = 8;
+export const TAG_GAP = 8;
 /** Room above the root for variable labels. */
 const TOP = 40;
 /** Room below the deepest level for "returned" badges and null stubs. */
@@ -155,14 +155,14 @@ function edgePath(a: Placed, b: Placed, kind: string): string {
   return kind === 'cycle' ? cycleGeometry(a, b).d : branch(a, b);
 }
 
-interface TagSpot {
+export interface TagSpot {
   side: 'left' | 'right' | 'center';
   /** 0: just above the node; 1: one row higher, with a stem down to the node. */
   row: 0 | 1;
 }
 
 /** Estimated width of a node's labels (11.5px bold names in pills, 4px apart). */
-const tagsWidth = (tags: NodeLabel[]) => tags.reduce((w, t) => w + 16 + t.name.length * 7, 0) + (tags.length - 1) * 4;
+export const tagsWidth = (tags: { name: string }[]) => tags.reduce((w, t) => w + 16 + t.name.length * 7, 0) + (tags.length - 1) * 4;
 
 /**
  * Where each node's variable labels go. A label sits on the side away from the branch that
@@ -402,7 +402,7 @@ function TreeComponentView({ comp, available, props }: { comp: TreeComponent; av
 }
 
 /** A node's variable labels; a label moved up a row keeps a short stem down to its node. */
-function TagGroup({ tags, spot }: { tags: NodeLabel[]; spot: TagSpot }) {
+export function TagGroup({ tags, spot }: { tags: { name: string; active: boolean; frame?: string }[]; spot: TagSpot }) {
   const lift = spot.row * TAG_ROW;
   const align =
     spot.side === 'left'
@@ -414,7 +414,7 @@ function TagGroup({ tags, spot }: { tags: NodeLabel[]; spot: TagSpot }) {
     <div className={`absolute bottom-full flex flex-col ${align}`} style={{ marginBottom: 6 }}>
       <div className="flex gap-1 whitespace-nowrap">
         {tags.map((t) => (
-          <NameTag key={`${t.frame}-${t.name}`} name={t.name} faint={!t.active} solid />
+          <NameTag key={`${t.frame ?? ''}-${t.name}`} name={t.name} faint={!t.active} solid />
         ))}
       </div>
       {lift > 0 && <span aria-hidden className="mx-2 w-0.5 rounded-full bg-navy-400/70" style={{ height: lift }} />}

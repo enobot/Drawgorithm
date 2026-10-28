@@ -14,13 +14,15 @@ import {
   variableRefs,
   windowOf,
 } from './analysis';
-import { ArrayView, Cells, isGrid, type ArrayRole } from './ArrayView';
+import { ArrayView, Cells, isGrid, type ArrayRole, type DequeExtras } from './ArrayView';
 import { lastRead, trackArrayItems } from './illustrated/identity';
 import { ListScene } from './illustrated/ListScene';
 import { QueueScene } from './illustrated/QueueScene';
 import { ShelfScene } from './illustrated/ShelfScene';
-import type { ShapeOf } from './bindings';
+import type { ShapeOf, StructureBinding } from './bindings';
 import type { Focus } from './focus';
+import { DRAWN_ABOVE, SpecialStructures } from './Special';
+import { trieRootOf } from './structures';
 import type { ListSlot } from './listLayout';
 import { ListView } from './ListView';
 import { MapView, ObjectView, SetView } from './MapView';
@@ -34,6 +36,8 @@ export interface BoardContext {
   hints: StaticHints;
   /** Which objects are tree or list nodes, and which fields to read (from the bindings). */
   shapeOf?: ShapeOf;
+  /** Heap id → heap, deque, union-find, graph or trie drawing (from the bindings). */
+  roles?: Map<number, StructureBinding>;
   focus: Focus;
   view?: ProblemDef['view'];
   /** Index cells to ring on the final step (e.g. Two Sum's answer). */
@@ -72,6 +76,7 @@ const isComparison = (step: Step) => step.kind === 'condition' || step.kind === 
 const isPrimitive = (v: VarSnap, heap: Heap, shapeOf: ShapeOf) => v.value.t !== 'ref' || !!shapeOf(heap[v.value.id]);
 
 function roleOf(name: string, hints: StaticHints): ArrayRole {
+  if (hints.deques?.includes(name)) return 'deque';
   if (hints.queues.includes(name)) return 'queue';
   if (hints.stacks.includes(name)) return 'stack';
   return 'array';
@@ -126,9 +131,27 @@ function StructureFor({
     case 'array': {
       const markers = markersFor(frame, name, h.items.length, hints);
       const result = ctx.resultCells?.arrayName === name ? ctx.resultCells.indices : undefined;
-      const role = roleOf(name, hints);
+      const special = ctx.roles?.get(h.id)?.role;
+      const role = special === 'deque' ? 'deque' : roleOf(name, hints);
       const reads = active ? (focus.cellReads.get(h.id) ?? new Set<number>()) : new Set<number>();
       const writes = active ? (focus.cellWrites.get(h.id) ?? new Set<number>()) : new Set<number>();
+      if (role === 'deque') {
+        return (
+          <Cells
+            items={h.items}
+            total={h.total}
+            heap={heap}
+            markers={[]}
+            reads={reads}
+            writes={writes}
+            role="deque"
+            result={result}
+            comparing={active && isComparison(step)}
+            shapeOf={ctx.shapeOf}
+            deque={dequeExtras(h, names, step, ctx)}
+          />
+        );
+      }
       const drawing = (
         <ArrayView
           arr={h}
@@ -227,6 +250,40 @@ function StructureFor({
   }
 }
 
+/**
+ * What a deque drawing needs beyond its items: identities from the recorded adds and
+ * removes, the values its items point at when the code reads nums[dq[k]], and which ends
+ * this step used.
+ */
+function dequeExtras(h: Extract<HeapSnap, { kind: 'array' }>, names: string[], step: Step, ctx: BoardContext): DequeExtras {
+  const track = ctx.steps ? trackArrayItems(ctx.steps, h.id)[step.index] : null;
+  const lookups: DequeExtras['lookups'] = [];
+  for (const target of [...new Set(names.flatMap((n) => ctx.hints.indexInto?.[n] ?? []))]) {
+    // The array the items index into, from the innermost call that has it.
+    const v = [...step.frames]
+      .reverse()
+      .flatMap((f) => f.vars)
+      .find((x) => x.name === target);
+    const t = v ? step.heap[refId(v.value) ?? -1] : undefined;
+    if (t?.kind !== 'array') continue;
+    lookups.push({
+      name: target,
+      values: h.items.map((x) =>
+        x.t === 'number' && Number.isInteger(x.v) && x.v >= 0 && x.v < t.items.length ? t.items[x.v] : undefined,
+      ),
+    });
+  }
+  const own = step.effects.filter((e) => 'objId' in e && e.objId === h.id);
+  const added = own.find((e) => e.type === 'array-add');
+  const removed = own.find((e) => e.type === 'array-remove');
+  return {
+    ids: track?.ids.length === h.items.length ? track.ids : undefined,
+    lookups,
+    added: added?.type === 'array-add' ? added.end : null,
+    removed: removed?.type === 'array-remove' ? removed.end : null,
+  };
+}
+
 const joinAnd = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /**
@@ -272,11 +329,27 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
   const blocks = frame.vars.filter((v) => isPrimitive(v, heap, shapeOf) && !(v.value.t === 'string' && hints.indexed.includes(v.name)));
   const strings = frame.vars.filter((v) => v.value.t === 'string' && hints.indexed.includes(v.name));
   const structures: { names: string[]; h: HeapSnap }[] = [];
+  // Heaps, graphs, tries and forests are drawn once above the calls; here they get a short note.
+  const above: { name: string; role: string }[] = [];
   for (const v of frame.vars) {
     if (isPrimitive(v, heap, shapeOf)) continue;
     const id = refId(v.value)!;
     const h = heap[id];
     if (!h) continue;
+    const special = ctx.roles?.get(id);
+    if (special && DRAWN_ABOVE.includes(special.role)) {
+      above.push({
+        name: v.name,
+        role: special.role === 'edge-list' ? 'graph' : special.role === 'union-find' ? 'union-find forest' : special.role,
+      });
+      continue;
+    }
+    // A Trie object (this, or a variable holding one) stands for the trie drawn from its root field.
+    const root = h.kind === 'object' ? trieRootOf(h, heap) : id;
+    if (root !== id && ctx.roles?.get(root)?.role === 'trie') {
+      above.push({ name: v.name, role: 'trie' });
+      continue;
+    }
     const existing = structures.find((s) => s.h.id === id);
     if (existing) existing.names.push(v.name);
     else structures.push({ names: [v.name], h });
@@ -319,6 +392,16 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
               );
             })}
           </AnimatePresence>
+        </div>
+      )}
+      {above.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {above.map((a) => (
+            <span key={a.name} className="flex items-center gap-1.5 text-[12px] text-navy-400">
+              <NameTag name={a.name} />
+              {a.role}, drawn above
+            </span>
+          ))}
         </div>
       )}
       {strings.map((v) => {
@@ -374,7 +457,8 @@ export function IllustratedNote() {
   return (
     <p className="max-w-2xl text-[12.5px] text-navy-400">
       Illustrated so far: queues (a line at a counter), linked lists (people holding ropes) and arrays read through index variables
-      (numbered shelves). Trees, maps, sets, stacks and grids are still drawn the technical way.
+      (numbered shelves). Trees, maps, sets, stacks, grids, heaps, deques, graphs, tries and union-find forests are still drawn the
+      technical way.
     </p>
   );
 }
@@ -389,63 +473,69 @@ export function Structures({ ctx }: { ctx: BoardContext }) {
   const labels = useMemo(() => nodeLabels(step.frames, step.heap, shapeOf), [step, shapeOf]);
   const activeFrame = step.frames[step.frames.length - 1];
   const queued = activeFrame ? queuedNodes(activeFrame, step.heap, ctx.hints, shapeOf) : new Set<number>();
-  if (!tree.components.length && !list.chains.length) return null;
+  const specials = ctx.roles?.size ? (
+    <SpecialStructures ctx={{ step, hints: ctx.hints, focus, roles: ctx.roles, steps: ctx.steps }} />
+  ) : null;
+  if (!tree.components.length && !list.chains.length) return specials;
   return (
-    <section aria-label="Trees and linked lists" className="flex flex-col gap-4">
-      {tree.components.length > 0 && (
-        <TreeView
-          diagram={tree}
-          heap={step.heap}
-          labels={labels}
-          current={ctx.current}
-          visited={ctx.visited}
-          returned={ctx.returned}
-          queued={queued}
-          written={focus.propWrites}
-          created={focus.created}
-          highlighted={ctx.highlightedIds}
-          highlightedEdges={ctx.highlightedEdges}
-          selected={ctx.selectedNode}
-          onSelect={ctx.onSelectNode}
-          details={ctx.details}
-        />
-      )}
-      {list.chains.length > 0 &&
-        (() => {
-          const drawing = (
-            <ListView
-              diagram={list}
-              heap={step.heap}
-              labels={labels}
-              current={ctx.current}
-              written={focus.propWrites}
-              created={focus.created}
-              highlighted={ctx.highlightedIds}
-              selected={ctx.selectedNode}
-              onSelect={ctx.onSelectNode}
-              slots={ctx.listSlots}
-            />
-          );
-          if (!ctx.illustrated) return drawing;
-          return withScene(
-            ctx,
-            <ListScene
-              diagram={list}
-              heap={step.heap}
-              labels={labels}
-              current={ctx.current}
-              written={focus.propWrites}
-              created={focus.created}
-              highlighted={ctx.highlightedIds}
-              selected={ctx.selectedNode}
-              onSelect={ctx.onSelectNode}
-              slots={ctx.listSlots}
-              overlay={!!ctx.details}
-            />,
-            drawing,
-          );
-        })()}
-    </section>
+    <>
+      {specials}
+      <section aria-label="Trees and linked lists" className="flex flex-col gap-4">
+        {tree.components.length > 0 && (
+          <TreeView
+            diagram={tree}
+            heap={step.heap}
+            labels={labels}
+            current={ctx.current}
+            visited={ctx.visited}
+            returned={ctx.returned}
+            queued={queued}
+            written={focus.propWrites}
+            created={focus.created}
+            highlighted={ctx.highlightedIds}
+            highlightedEdges={ctx.highlightedEdges}
+            selected={ctx.selectedNode}
+            onSelect={ctx.onSelectNode}
+            details={ctx.details}
+          />
+        )}
+        {list.chains.length > 0 &&
+          (() => {
+            const drawing = (
+              <ListView
+                diagram={list}
+                heap={step.heap}
+                labels={labels}
+                current={ctx.current}
+                written={focus.propWrites}
+                created={focus.created}
+                highlighted={ctx.highlightedIds}
+                selected={ctx.selectedNode}
+                onSelect={ctx.onSelectNode}
+                slots={ctx.listSlots}
+              />
+            );
+            if (!ctx.illustrated) return drawing;
+            return withScene(
+              ctx,
+              <ListScene
+                diagram={list}
+                heap={step.heap}
+                labels={labels}
+                current={ctx.current}
+                written={focus.propWrites}
+                created={focus.created}
+                highlighted={ctx.highlightedIds}
+                selected={ctx.selectedNode}
+                onSelect={ctx.onSelectNode}
+                slots={ctx.listSlots}
+                overlay={!!ctx.details}
+              />,
+              drawing,
+            );
+          })()}
+      </section>
+    </>
   );
 }
 

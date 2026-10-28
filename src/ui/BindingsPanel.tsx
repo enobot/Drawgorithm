@@ -1,7 +1,24 @@
 import { useStore } from '../state/store';
-import { PLAIN, type ArrayRole, type BindingSource, type NodeShape, type ResolvedBindings } from '../viz/bindings';
+import { PLAIN, type ArrayRole, type BindingSource, type NodeShape, type ObjectRole, type ResolvedBindings } from '../viz/bindings';
 
 const SOURCE_LABEL: Record<BindingSource, string> = { convention: 'convention', code: 'from your code', user: 'your choice' };
+
+const ARRAY_OPTIONS: { value: ArrayRole; label: string }[] = [
+  { value: 'cells', label: 'Indexed cells' },
+  { value: 'stack', label: 'Stack (top at the end)' },
+  { value: 'queue', label: 'Queue (front at index 0)' },
+  { value: 'deque', label: 'Deque (used at both ends)' },
+  { value: 'heap', label: 'Heap (binary tree and cells)' },
+  { value: 'union-find', label: 'Union-find (parent links)' },
+  { value: 'graph', label: 'Graph: adjacency list' },
+  { value: 'edge-list', label: 'Graph: edge list' },
+];
+
+const OBJECT_OPTIONS: { value: ObjectRole; label: string }[] = [
+  { value: 'plain', label: 'Plain fields' },
+  { value: 'graph', label: 'Graph (key → neighbors)' },
+  { value: 'trie', label: 'Trie (letters → child nodes)' },
+];
 
 const KIND_OPTIONS: { value: NodeShape['kind']; label: string }[] = [
   { value: 'tree', label: 'Binary tree' },
@@ -94,8 +111,9 @@ function ShapeEditor({ className, shape, fields }: { className: string; shape: N
 export function BindingsPanel({ bindings }: { bindings: ResolvedBindings }) {
   const bindShape = useStore((s) => s.bindShape);
   const bindArray = useStore((s) => s.bindArray);
+  const bindObject = useStore((s) => s.bindObject);
   const shown = bindings.shapes.filter((b) => b.shape.kind !== 'object' || b.source === 'user');
-  const count = shown.length + bindings.ambiguous.length + bindings.arrays.length;
+  const count = shown.length + bindings.ambiguous.length + bindings.arrays.length + bindings.objects.length;
   if (count === 0) return null;
   const needsChoice = bindings.ambiguous.length > 0;
   return (
@@ -146,9 +164,11 @@ export function BindingsPanel({ bindings }: { bindings: ResolvedBindings }) {
                 onChange={(e) => bindArray(a.name, { role: e.target.value as ArrayRole })}
                 className="rounded border border-navy-600 bg-navy-900 px-1.5 py-0.5 text-[12px] text-navy-100"
               >
-                <option value="cells">Indexed cells</option>
-                <option value="stack">Stack (top at the end)</option>
-                <option value="queue">Queue (front at index 0)</option>
+                {ARRAY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
               <span className="text-[12px] text-navy-400">
                 ({SOURCE_LABEL[a.roleSource]}: {a.roleReason})
@@ -180,6 +200,32 @@ export function BindingsPanel({ bindings }: { bindings: ResolvedBindings }) {
                   ({a.pointerSource === 'user' ? 'your choice' : 'detected from indexing like nums[i]'})
                 </span>
               </fieldset>
+            )}
+          </div>
+        ))}
+        {bindings.objects.map((o) => (
+          <div key={o.name} className="flex flex-wrap items-center gap-2">
+            <span className="font-mono font-semibold text-navy-100">{o.name}</span>
+            <select
+              aria-label={`Draw ${o.name} as`}
+              value={o.role}
+              onChange={(e) => bindObject(o.name, e.target.value as ObjectRole)}
+              className="rounded border border-navy-600 bg-navy-900 px-1.5 py-0.5 text-[12px] text-navy-100"
+            >
+              {OBJECT_OPTIONS.map((x) => (
+                <option key={x.value} value={x.value}>
+                  {x.label}
+                  {x.value !== 'plain' && !o.fits.includes(x.value) ? ' (data does not fit yet)' : ''}
+                </option>
+              ))}
+            </select>
+            <span className="text-[12px] text-navy-400">
+              ({SOURCE_LABEL[o.source]}: {o.reason})
+            </span>
+            {o.source === 'user' && (
+              <button type="button" className="text-[12px] text-teal-300 hover:underline" onClick={() => bindObject(o.name, null)}>
+                use automatic
+              </button>
             )}
           </div>
         ))}

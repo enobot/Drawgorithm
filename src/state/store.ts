@@ -8,7 +8,7 @@ import { EngineStopped, cancelObsoleteRun, runInWorker, stopRun } from '../worke
 import { readDeepLink, type Pane } from './deepLink';
 import { mergeLive, type LiveState } from './live';
 import type { FormatResult } from '../editor/format';
-import { NO_OVERRIDES, type ArrayRole, type BindingOverrides, type NodeShape } from '../viz/bindings';
+import { NO_OVERRIDES, type ArrayRole, type BindingOverrides, type NodeShape, type ObjectRole } from '../viz/bindings';
 
 export interface InputRow {
   name: string;
@@ -128,6 +128,8 @@ interface Actions {
   /** null removes the choice and returns to automatic detection. */
   bindShape(className: string, shape: NodeShape | null): void;
   bindArray(name: string, choice: { role?: ArrayRole; pointers?: string[] } | null): void;
+  /** How to draw the Map or object a variable holds (graph, trie, plain); null goes back to automatic. */
+  bindObject(name: string, role: ObjectRole | null): void;
   setInspectFailed(inspect: boolean): void;
   requestFormat(): void;
   setFormatOnSave(on: boolean): void;
@@ -467,6 +469,15 @@ export const useStore = create<State & Actions>()((set, get) => ({
     if (choice) arrays[name] = { ...arrays[name], ...choice };
     else delete arrays[name];
     set({ bindings: { ...s.bindings, [s.problemId]: { ...cur, arrays } } });
+  },
+
+  bindObject(name, role) {
+    const s = get();
+    const cur = s.bindings[s.problemId] ?? NO_OVERRIDES;
+    const objects = { ...cur.objects };
+    if (role) objects[name] = role;
+    else delete objects[name];
+    set({ bindings: { ...s.bindings, [s.problemId]: { ...cur, objects } } });
   },
 
   requestFormat() {

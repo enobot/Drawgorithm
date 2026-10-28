@@ -48,6 +48,7 @@ export function BuildView() {
         step,
         hints: bindings!.hints,
         shapeOf: bindings!.shapeOf,
+        roles: bindings!.roles,
         focus: EMPTY_FOCUS,
         highlightedIds: new Set(lineInfo?.objIds ?? []),
         highlightedEdges: lineInfo?.edges,

@@ -183,6 +183,7 @@ export function RunView() {
     step,
     hints: bindings!.hints,
     shapeOf: bindings!.shapeOf,
+    roles: bindings!.roles,
     focus,
     view: problem.view,
     resultCells: step.kind === 'done' ? resultIndexCells(step, problem.view?.resultIndicesInto) : undefined,

@@ -66,6 +66,7 @@ export type Effect =
   | { type: 'index-read'; objId: number; index: number; value: ValueSnap }
   | { type: 'index-write'; objId: number; index: number; before: ValueSnap; after: ValueSnap }
   | { type: 'char-read'; name: string; index: number; value: ValueSnap }
+  /** value is undefined when the object has no such field. */
   | { type: 'prop-read'; objId: number; key: string; value: ValueSnap }
   | { type: 'prop-write'; objId: number; key: string; before: ValueSnap; after: ValueSnap }
   | { type: 'map-lookup'; objId: number; key: ValueSnap; found: boolean; value?: ValueSnap; method: 'get' | 'has' }
@@ -129,6 +130,10 @@ export interface StaticHints {
   queues: string[];
   /** arrays used as stacks (.pop() without .shift()) */
   stacks: string[];
+  /** arrays used at both ends (.pop() and .shift() or .unshift()); they are also listed in queues */
+  deques?: string[];
+  /** arrays whose items are used as indexes into other arrays: `nums[dq[0]]` gives dq → [nums] */
+  indexInto?: Record<string, string[]>;
   /** top-level functions */
   functions: FunctionInfo[];
 }

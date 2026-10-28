@@ -86,6 +86,7 @@ export function collectHints(program: ES.Program): StaticHints {
   const indexed = new Set<string>();
   const shifts = new Set<string>();
   const pops = new Set<string>();
+  const indexInto = new Map<string, Set<string>>();
   const assignments: { target: string; ids: Set<string> }[] = [];
 
   const addPointer = (arr: string, name: string, axis: number) => {
@@ -103,6 +104,13 @@ export function collectHints(program: ES.Program): StaticHints {
         const ids = new Set<string>();
         bareIdentifiers(node.property, ids);
         for (const id of ids) addPointer(base.name, id, base.depth);
+        // `nums[dq[k]]`: the items of dq are indexes into nums.
+        const inner = node.property.type === 'MemberExpression' && node.property.computed ? baseOf(node.property.object) : null;
+        if (inner && inner.depth === 0 && inner.name !== base.name) {
+          const targets = indexInto.get(inner.name) ?? new Set<string>();
+          targets.add(base.name);
+          indexInto.set(inner.name, targets);
+        }
       }
     }
     if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' && !node.callee.computed) {
@@ -177,6 +185,8 @@ export function collectHints(program: ES.Program): StaticHints {
     indexed: [...indexed],
     queues: [...shifts],
     stacks: [...pops].filter((n) => !shifts.has(n)),
+    deques: [...pops].filter((n) => shifts.has(n)),
+    indexInto: Object.fromEntries([...indexInto].map(([k, v]) => [k, [...v]])),
     functions,
   };
 }

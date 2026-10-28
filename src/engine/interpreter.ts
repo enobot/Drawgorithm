@@ -1302,6 +1302,8 @@ export class Interpreter implements Host, NodeNamer {
       const method = obj.proto?.methods.get(k);
       if (method) return method;
       if (k === 'hasOwnProperty') return new NativeFn('hasOwnProperty', (_t, a) => obj.props.has(toStr(a[0])));
+      // Looking up a field the object doesn't have is a read too: it found nothing (a trie's missing branch).
+      this.effect({ type: 'prop-read', objId: this.idOf(obj), key: k, value: { t: 'undefined' } }, [obj]);
       return undefined;
     }
     if (obj instanceof NativeFn) {

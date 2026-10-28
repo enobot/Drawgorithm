@@ -93,6 +93,11 @@ export const SUPPORTED_RENDERERS: Renderer[] = [
   'binary-tree',
   'call-stack',
   'grid',
+  'heap-tree',
+  'graph',
+  'trie',
+  'deque',
+  'union-find',
 ];
 
 type Brief = [number, string, TopicId, Difficulty, string, string];
