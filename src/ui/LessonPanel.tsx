@@ -1,13 +1,16 @@
 import { LESSON_CONTENT } from '../learn/lessons';
 import { lessonForProblem, lessonProblemId } from '../learn/problems';
+import { lessonNotes } from '../learn/python';
 import { FOUNDATIONS, LESSONS } from '../practice/foundations';
-import { useStore } from '../state/store';
+import { currentWork, useStore, workLanguage } from '../state/store';
 
 /** Everything a lesson adds to the problem panel: what to watch, where the idea is used, what to practice. */
 export function LessonPanel({ problemId }: { problemId: string }) {
   const lesson = lessonForProblem(problemId);
   const selectProblem = useStore((s) => s.selectProblem);
+  const language = useStore((s) => workLanguage(currentWork(s)));
   if (!lesson) return null;
+  const watch = lessonNotes(lesson, language).watch;
   const practice = lesson.practice.map((id) => FOUNDATIONS.find((e) => e.id === id)!).filter(Boolean);
   const next = LESSON_CONTENT[LESSON_CONTENT.indexOf(lesson) + 1];
   return (
@@ -19,7 +22,7 @@ export function LessonPanel({ problemId }: { problemId: string }) {
       <section className="flex flex-col gap-1.5">
         <h3 className="section-title">What to watch</h3>
         <ol className="flex list-decimal flex-col gap-1 pl-5 text-[13.5px] leading-snug text-navy-200 marker:text-navy-500">
-          {lesson.watch.map((w) => (
+          {watch.map((w) => (
             <li key={w}>{w}</li>
           ))}
         </ol>

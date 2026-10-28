@@ -11,5 +11,9 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // The module cache keys a file by its own source, so an import.meta.glob (the Python answers
+    // and demos) would keep the file list of an earlier run (vitest.dev/config/fsmodulecache warns
+    // about this for anything that reads a folder). Without it a full run is under 1 s slower.
+    fsModuleCache: false,
   },
 });

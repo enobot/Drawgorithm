@@ -2,7 +2,8 @@ import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { parseValue, suggestStructures } from '../problems/pasted';
 import { deepEqual } from '../problems/compare';
 import { missingInputs } from '../problems/inputs';
-import { CUSTOM_ID, currentWork, problemFor, useStore, type InputRow } from '../state/store';
+import { notesIn } from '../problems/starters';
+import { CUSTOM_ID, currentWork, problemFor, useStore, workLanguage, type InputRow } from '../state/store';
 import type { FrameSnap, InputKind, Step } from '../trace/types';
 import { buildListDiagram, buildTreeDiagram, nodeLabels, refId } from '../viz/analysis';
 import { Cells } from '../viz/ArrayView';
@@ -198,6 +199,8 @@ export function ProblemPanel() {
   const [practiceOpen, setPracticeOpen] = useState(false);
   const [lessonsOpen, setLessonsOpen] = useState(false);
   const p = problemFor(problemId, custom);
+  // The description and notes in the words for the code the learner's language starts from.
+  const notes = notesIn(p, workLanguage(work));
   const isCustom = problemId === CUSTOM_ID;
   const expectedOk = !work.expectedText.trim() || parseValue(work.expectedText).ok;
   // A cycle position is not an argument (see InputKind), so it never stands in for a parameter.
@@ -244,9 +247,9 @@ export function ProblemPanel() {
 
       {isCustom && <PasteBox />}
 
-      {p.description.length > 0 && (
+      {notes.description.length > 0 && (
         <section className="flex flex-col gap-2 text-[14px] leading-relaxed text-navy-200">
-          {p.description.map((d, i) => (
+          {notes.description.map((d, i) => (
             <p key={i}>{d}</p>
           ))}
         </section>
@@ -372,18 +375,18 @@ export function ProblemPanel() {
         )}
       </section>
 
-      {p.explanation && (
+      {notes.explanation && (
         <section className="flex flex-col gap-1.5">
           <h3 className="section-title">{isLessonId(problemId) ? 'How the demo works' : 'How the starter code works'}</h3>
-          <p className="text-[14px] leading-relaxed text-navy-200">{p.explanation}</p>
+          <p className="text-[14px] leading-relaxed text-navy-200">{notes.explanation}</p>
         </section>
       )}
 
-      {p.tryThis.length > 0 && (
+      {notes.tryThis.length > 0 && (
         <section className="flex flex-col gap-1.5">
           <h3 className="section-title">Try changing</h3>
           <ul className="flex list-disc flex-col gap-1 pl-5 text-[13.5px] text-navy-200 marker:text-navy-500">
-            {p.tryThis.map((t) => (
+            {notes.tryThis.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { LANGUAGES } from '../languages';
 import { lessonProblemId } from '../learn/problems';
 import { checkExercise, type CaseResult } from '../practice/check';
 import { FOUNDATIONS, LESSONS } from '../practice/foundations';
+import { answerIn } from '../practice/python';
 import type { Exercise } from '../practice/schema';
 import { currentWork, useStore, workLanguage } from '../state/store';
 import { cancelCheck, checkInWorker } from '../worker/client';
@@ -106,12 +108,13 @@ function CheckTests({ exercise }: { exercise: Exercise }) {
   );
 }
 
-/** Plays the authored answer on the board, one step at a time, without touching the learner's code. */
+/** Plays the authored answer (in the learner's language) on the board, one step at a time, without touching the learner's code. */
 function WalkthroughButton({ exercise }: { exercise: Exercise }) {
   const startWalkthrough = useStore((s) => s.startWalkthrough);
   const endWalkthrough = useStore((s) => s.endWalkthrough);
   const walking = useStore((s) => s.walkthrough?.problemId === exercise.id);
-  const s = exercise.content!.solution;
+  const language = useStore((s) => workLanguage(currentWork(s)));
+  const answer = answerIn(exercise, language)!;
   return (
     <section className="flex flex-col gap-2">
       <h3 className="section-title">Stuck?</h3>
@@ -126,7 +129,14 @@ function WalkthroughButton({ exercise }: { exercise: Exercise }) {
         <button
           type="button"
           className="btn-primary self-start"
-          onClick={() => startWalkthrough({ code: s.code, title: `${exercise.number}. ${exercise.title}`, explanation: s.explanation })}
+          onClick={() =>
+            startWalkthrough({
+              code: answer.code,
+              language: answer.language,
+              title: `${exercise.number}. ${exercise.title}`,
+              explanation: answer.explanation,
+            })
+          }
         >
           Walk through the answer
         </button>
@@ -135,22 +145,27 @@ function WalkthroughButton({ exercise }: { exercise: Exercise }) {
   );
 }
 
-/** The authored reference, kept visibly separate from the learner's own code. */
+/** The authored reference in the learner's language, kept visibly separate from the learner's own code. */
 function Reference({ exercise }: { exercise: Exercise }) {
   const s = exercise.content!.solution;
+  const language = useStore((st) => workLanguage(currentWork(st)));
+  const answer = answerIn(exercise, language)!;
+  const label = LANGUAGES.find((l) => l.id === answer.language)?.label ?? answer.language;
   return (
     <details className="rounded-xl bg-navy-850 px-3 py-2">
       <summary className="cursor-pointer select-none text-[13.5px] font-semibold text-navy-100">
-        Reference solution (authored, not your code)
+        Reference solution in {label} (authored, not your code)
       </summary>
       <div className="mt-2 flex flex-col gap-2 text-[13.5px] leading-snug text-navy-200">
         <p className="rounded-lg bg-amber-300/10 px-2.5 py-1.5 text-[12.5px] text-amber-100">
           This is a worked reference written for this exercise. The drawing shows your own code unless you choose Walk through the answer.
         </p>
-        {s.explanation.map((p) => (
+        {answer.explanation.map((p) => (
           <p key={p}>{p}</p>
         ))}
-        <pre className="overflow-x-auto rounded-lg bg-navy-950 p-3 font-mono text-[12.5px] leading-relaxed text-navy-100">{s.code}</pre>
+        <pre className="overflow-x-auto rounded-lg bg-navy-950 p-3 font-mono text-[12.5px] leading-relaxed text-navy-100">
+          {answer.code}
+        </pre>
         <p>
           <strong className="text-navy-100">Time:</strong> {s.complexity.time}. <strong className="text-navy-100">Extra space:</strong>{' '}
           {s.complexity.space}. {s.complexity.assumptions}

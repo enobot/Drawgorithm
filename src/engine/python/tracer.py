@@ -8,6 +8,7 @@
 # step shows what changed but never which values were only read or compared.
 import ast
 import json
+import keyword
 import math
 import sys
 from collections import deque
@@ -715,8 +716,15 @@ def run(request_json):
             params = [p for p in inspect.signature(fn).parameters if p != 'self']
         except (TypeError, ValueError):
             params = []
-        by_name = bool(inputs) and all(i['name'] in params for i in inputs)
-        ordered = sorted(inputs, key=lambda i: params.index(i['name'])) if by_name else inputs
+
+        def param_of(name):
+            # A reserved word can't be a parameter: Python's habit is a trailing underscore (from → from_).
+            if name in params:
+                return name
+            return name + '_' if keyword.iskeyword(name) and name + '_' in params else None
+
+        by_name = bool(inputs) and all(param_of(i['name']) for i in inputs)
+        ordered = sorted(inputs, key=lambda i: params.index(param_of(i['name']))) if by_name else inputs
         if not by_name and inputs and params:
             notes.append(f"Inputs were passed in order because their names ({', '.join(i['name'] for i in inputs)}) don't match the parameters ({', '.join(params)}).")
         pos_input = next((i for i in req['inputs'] if i['kind'] == 'pos'), None)

@@ -31,6 +31,8 @@ export interface ProblemDef {
   starter: string;
   /** Small edits to try, shown under the description. */
   tryThis: string[];
+  /** Python starter code, with the text that names JavaScript code reworded for it (see starterIn, notesIn). */
+  python?: { starter: string; description?: string[]; explanation?: string; tryThis?: string[] };
   view?: {
     /** The result is a list of indexes into this input array. */
     resultIndicesInto?: string;

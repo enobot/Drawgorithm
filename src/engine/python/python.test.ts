@@ -84,6 +84,10 @@ describe('Python runs', () => {
     const cls = 'class Solution:\n    def twoSum(self, nums, target):\n        return [0, 1]\n';
     expect(run(cls, 'twoSum', auto({ nums: [1, 2], target: 3 })).plainResult).toEqual([0, 1]);
     expect(run('def two_sum(nums, target):\n    return [1, 0]\n', 'twoSum', auto({ nums: [1, 2], target: 3 })).plainResult).toEqual([1, 0]);
+    // A reserved word can't be a parameter, so an input named from goes to from_ (by name, not by position).
+    const kw = run('def f(n, from_):\n    return from_ - n\n', 'f', auto({ from: 5, n: 1 }));
+    expect(kw.plainResult).toBe(4);
+    expect(kw.notes).toEqual([]);
   });
 
   it('captures print output with the step it belongs to', () => {

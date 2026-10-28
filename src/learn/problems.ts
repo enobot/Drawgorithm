@@ -3,6 +3,7 @@
 import type { ProblemDef } from '../problems/catalog';
 import { LESSONS } from '../practice/foundations';
 import { LESSON_CONTENT, type Lesson } from './lessons';
+import { lessonNotes, PYTHON_DEMOS } from './python';
 
 export const lessonProblemId = (lessonId: string) => `lesson-${lessonId}`;
 export const isLessonId = (problemId: string) => problemId.startsWith('lesson-');
@@ -17,6 +18,8 @@ export function lessonForProblem(problemId: string): Lesson | undefined {
 }
 
 export function lessonProblem(l: Lesson): ProblemDef {
+  const python = PYTHON_DEMOS[l.id];
+  const notes = lessonNotes(l, 'python');
   return {
     id: lessonProblemId(l.id),
     title: LESSONS[l.id] ?? l.id,
@@ -30,6 +33,7 @@ export function lessonProblem(l: Lesson): ProblemDef {
     cases: l.demo.cases.map((c) => ({ label: c.label, inputs: c.inputs, expected: { kind: 'return', value: c.output } })),
     starter: l.demo.code,
     tryThis: l.tryThis,
+    python: python ? { starter: python, description: notes.idea, explanation: notes.demoExplanation, tryThis: notes.tryThis } : undefined,
     view: l.demo.view,
   };
 }

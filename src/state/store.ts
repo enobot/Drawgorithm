@@ -41,6 +41,8 @@ export type VizTab = 'build' | 'run';
 export interface Walkthrough {
   problemId: string;
   code: string;
+  /** The answer's language: the learner's working language when the answer exists in it. */
+  language: LanguageId;
   /** e.g. "37. Pick a Subset" */
   title: string;
   /** How the answer works, in the authored words. */
@@ -606,9 +608,9 @@ export function currentWork(s: Pick<State, 'problemId' | 'work' | 'custom'>): Wo
 
 export const workLanguage = (w: Work): LanguageId => w.language ?? 'javascript';
 
-/** The language of the code the editor panel shows: a walkthrough's answer is JavaScript. */
+/** The language of the code the editor panel shows: during a walkthrough, the answer's. */
 export function shownLanguage(s: Pick<State, 'problemId' | 'work' | 'custom' | 'walkthrough'>): LanguageId {
-  return s.walkthrough?.problemId === s.problemId ? 'javascript' : workLanguage(currentWork(s));
+  return s.walkthrough?.problemId === s.problemId ? s.walkthrough.language : workLanguage(currentWork(s));
 }
 
 /** The code the editor panel shows and Run runs: a walkthrough's answer while one is open, otherwise the learner's own. */
