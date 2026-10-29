@@ -8,6 +8,7 @@ import { answerIn } from '../practice/python';
 import type { Exercise } from '../practice/schema';
 import { currentWork, useStore, workLanguage } from '../state/store';
 import { cancelCheck, checkInWorker } from '../worker/client';
+import { InterviewCoach } from './InterviewCoach';
 
 function List({ title, items }: { title: string; items: string[] }) {
   return (
@@ -207,6 +208,7 @@ export function PracticePanel({ exerciseId }: { exerciseId: string }) {
       <CheckTests exercise={exercise} />
       <WalkthroughButton exercise={exercise} />
       <Reference exercise={exercise} />
+      <InterviewCoach exercise={exercise} />
       <section className="flex flex-col gap-1.5 text-[13px] leading-snug text-navy-300">
         <h3 className="section-title">What the drawing shows</h3>
         <p>{c.visualization.spec}</p>

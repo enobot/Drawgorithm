@@ -64,6 +64,17 @@ A second original collection, under the same **Practice** button (switch between
 
 Every exercise has the same parts as Foundations 75, a JavaScript and a Python answer with a walkthrough, and the same checks: `src/practice/interview.test.ts` compares every expected output with an independent computation, runs the JavaScript reference on every case and checks rules the outputs can't show (for example that a deep copy is made of new nodes, or that an answer keeps no extra memory when the rules say so); `src/practice/python.test.ts` runs every Python answer on real CPython.
 
+## How to Explain This in an Interview
+
+See your code. Understand your approach. Explain it with confidence. That's the aim, and here is what backs it. The board runs your own code. Each guide's example approach explains the authored answer, and is checked against it. **Explain my code** offers wording only for an approach your own runs actually show. It can't promise how an interview will go.
+
+Under a practice exercise, **How to Explain This in an Interview** is an optional, text-only guide, closed until you open it; the coding and the drawing stay the main workflow. It goes through ten short sections, from understanding the problem to wrapping up. Each has first-person wording labeled **You could say…**, meant to be adapted rather than recited, and a **Why this matters** note.
+
+- **Before you write code:** the example approach starts hidden and reveals one section at a time. It links passages to lines of the authored answer, and **Show on the board** stops the answer's walkthrough at the step a moment describes.
+- **After you write code:** **Explain my code** runs your code on every test and on three larger inputs, and offers wording only for what those runs show. That means passing tests, how its steps and memory grew, and whether it used a lookup table, recursion or new nodes. Failing code gets its failing cases (input, expected and actual output) instead of an explanation. Code that passes but breaks a stated rule, such as a scan where O(log n) is required, is told which rule. Code that matches no authored approach gets the observations only.
+
+Complete guides exist for three exercises: 4 (pair sum), 17 (linked-list reversal) and 26 (binary search). Every other exercise says its guide is planned. No outside service is involved, and the code's text isn't read; everything comes from its recorded runs, in your browser. The schema, the variants, what is verified and the sources are in [docs/INTERVIEW-COACHING.md](docs/INTERVIEW-COACHING.md).
+
 ## Screen sizes
 
 - **Wide (1200px and up)**: Problem, Code and Visual side by side, each resizable; Problem and Code can be hidden.
@@ -115,6 +126,7 @@ src/
   editor/          Monaco setup and the Prettier formatter
   problems/        Built-in examples, pasted-problem parsing, expected-vs-actual comparison
   practice/        Foundations 75: exercise schema, catalog, authored exercises, test checker
+  interview/       How to Explain This in an Interview: guide schema, guides, moment finder, run observations
   learn/           Concept lessons: content, verified demos, opened as problems
   viz/illustrated/ Illustrated scenes (queue, linked list, shelves) and their sketch kit
 ```
@@ -125,7 +137,7 @@ Coverage, the capability matrix and the staged plan are in [docs/COVERAGE.md](do
 
 ## Tests
 
-`npm test` runs Vitest: trace generation, Two Sum duplicates, Binary Search boundaries, execution limits, unsupported syntax, Live Build (unfinished code, cycles, shared and detached nodes, null children), tree layout and traversal state, representative LeetCode-style patterns, the formatter, stale-run cancellation, demo links and zoom limits, queue item identities for the illustrated view, the heap, deque, union-find, graph and trie readers (which variables get them, swaps, parent links, graph forms and traversal state, trie words and missing branches), and the Foundations 75 catalog and checker.
+`npm test` runs Vitest: trace generation, Two Sum duplicates, Binary Search boundaries, execution limits, unsupported syntax, Live Build (unfinished code, cycles, shared and detached nodes, null children), tree layout and traversal state, representative LeetCode-style patterns, the formatter, stale-run cancellation, demo links and zoom limits, queue item identities for the illustrated view, the heap, deque, union-find, graph and trie readers (which variables get them, swaps, parent links, graph forms and traversal state, trie words and missing branches), the Foundations 75 catalog and checker, and the interview guides. Each guide's ten sections are checked against their sentence patterns, its quotes, cases, complexity, code links and moments against its exercise, and the figures it states are measured. Learner-style solutions in JavaScript and on CPython get the explanation for their own approach, or their failing cases, or the rule they break.
 
 `.github/workflows/checks.yml` runs the type check, lint, every test, the format check, the build, the third-party notice check and `npm audit` on every push and pull request.
 

@@ -95,6 +95,23 @@ describe('stale-result cancellation', () => {
   });
 });
 
+describe('picking another case', () => {
+  it('keeps the editor’s language and code, and loads that case’s inputs', async () => {
+    const { currentWork, workLanguage } = await import('./store');
+    const s = useStore.getState();
+    s.selectProblem('f75-34');
+    useStore.getState().setLanguage('python');
+    useStore.getState().setCode('def groupByLevel(root):\n    return []\n');
+    useStore.getState().selectCase(1);
+    const w = currentWork(useStore.getState());
+    expect(workLanguage(w)).toBe('python');
+    expect(w.code).toBe('def groupByLevel(root):\n    return []\n');
+    expect(w.caseIndex).toBe(1);
+    expect(w.inputs.map((r) => r.text)).toEqual(['[1,2,null,3]']);
+    expect(w.otherCode?.javascript).toBeTruthy();
+  });
+});
+
 describe('board zoom', () => {
   it('stays within its limits, whatever the input', () => {
     const s = useStore.getState();

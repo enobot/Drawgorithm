@@ -346,7 +346,9 @@ export const useStore = create<State & Actions>()((set, get) => ({
   selectCase(index) {
     const s = get();
     const p = problemFor(s.problemId, s.custom);
-    set({ work: { ...s.work, [s.problemId]: caseWork(p, index, currentWork(s).code) } });
+    const w = currentWork(s);
+    // Only the case changes: the editor's language and the code kept for the other languages stay.
+    set({ work: { ...s.work, [s.problemId]: { ...w, ...caseWork(p, index, w.code) } } });
     // Auto-run waits during a walkthrough, so the answer is replayed on the new case from its first step.
     if (s.walkthrough?.problemId === s.problemId) void get().startRun();
   },
