@@ -11,7 +11,7 @@ import { resolveBindings } from '../viz/bindings';
 import { readCallTree } from '../viz/structures';
 import { checkExercise } from './check';
 import { ALL_EXERCISES, findExercise } from './collections';
-import { answerIn, PYTHON_ANSWERS, PYTHON_EXPLANATIONS } from './python';
+import { answerIn, hintsIn, PYTHON_ANSWERS, PYTHON_EXPLANATIONS, PYTHON_HINTS } from './python';
 import type { Exercise, ExerciseCase } from './schema';
 
 let py: PyodideAPI;
@@ -54,6 +54,45 @@ describe('Python answers', () => {
       expect(e?.content, id).toBeTruthy();
       expect(text.length, id).toBe(e.content!.solution.explanation.length);
     }
+  });
+
+  it('rewords only hints that exist, keeping how many there are and changing at least one', () => {
+    for (const [id, hints] of Object.entries(PYTHON_HINTS)) {
+      const e = exercise(id);
+      expect(e?.content, id).toBeTruthy();
+      expect(hints.length, id).toBe(e.content!.hints.length);
+      expect(hints, id).not.toEqual(e.content!.hints);
+    }
+  });
+
+  it('shows the Python hints in Python and the JavaScript ones otherwise', () => {
+    const e = exercise('f75-26');
+    expect(hintsIn(e, 'python')).toEqual(PYTHON_HINTS['f75-26']);
+    expect(hintsIn(e, 'python')[1]).toContain('mid = (low + high) // 2');
+    expect(hintsIn(e, 'javascript')).toEqual(e.content!.hints);
+    // An exercise whose hints name no code shows the same hints in both languages.
+    expect(hintsIn(exercise('f75-01'), 'python')).toEqual(exercise('f75-01').content!.hints);
+  });
+
+  it('gives no Python hint that names JavaScript-only code', () => {
+    const JAVASCRIPT = [
+      /\bnull\b/,
+      /\bundefined\b/,
+      /\b(true|false)\b/,
+      /\bInfinity\b/,
+      /\b(Map|Set)\b/,
+      /===|!==|>>>/,
+      /\bMath\./,
+      /\.length\b/,
+      /\.(has|push|shift|unshift)\(/,
+      /\b(const|let|var)\s+\w+\s*=/,
+    ];
+    const found = available.flatMap((e) =>
+      hintsIn(e, 'python')
+        .filter((h) => JAVASCRIPT.some((re) => re.test(h)))
+        .map((h) => `${e.id}: ${h}`),
+    );
+    expect(found).toEqual([]);
   });
 
   it('opens the Python answer for Python and the JavaScript one otherwise', () => {

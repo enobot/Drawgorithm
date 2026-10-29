@@ -4,6 +4,8 @@ import type { Heap, HeapSnap, ValueSnap } from '../trace/types';
 import { conventionShape, formatSnap, nodeValueLabel, windowOf, type Marker, type ObjectSnap } from './analysis';
 import type { ShapeOf } from './bindings';
 import { varColor } from './colors';
+import type { Dialect } from './dialect';
+import { useDialect } from './dialectContext';
 import { GLIDE, POP, STATE, useGlide, type VisualState } from './theme';
 import { NameTag, ValueText } from './Value';
 
@@ -49,6 +51,7 @@ export interface DequeExtras {
 }
 
 function CellValue({ v, heap, isString, shapeOf }: { v: ValueSnap; heap: Heap; isString?: boolean; shapeOf: ShapeOf }) {
+  const dialect = useDialect();
   if (isString && v.t === 'string') return <span className="text-teal-100">{v.v === ' ' ? '␣' : v.v}</span>;
   if (v.t === 'ref') {
     const h = heap[v.id];
@@ -56,7 +59,7 @@ function CellValue({ v, heap, isString, shapeOf }: { v: ValueSnap; heap: Heap; i
     if (h && shape) {
       return (
         <span className="inline-flex size-9 items-center justify-center rounded-full bg-navy-700 text-[14px] font-bold shadow-[inset_0_0_0_1.5px_rgb(166_181_210/0.5)]">
-          {nodeValueLabel(h as ObjectSnap, heap, shape)}
+          {nodeValueLabel(h as ObjectSnap, heap, shape, dialect)}
         </span>
       );
     }
@@ -75,15 +78,16 @@ function cellState(i: number, p: Pick<CellsProps, 'reads' | 'writes' | 'result' 
 const CELL_LABEL: Partial<Record<VisualState, string>> = { changed: 'changed', result: 'answer', compare: 'compared', current: 'read' };
 
 /** Estimated width a value needs in a cell (16px text plus padding); characters and nodes fit the standard cell. */
-function valueWidth(v: ValueSnap, heap: Heap, shapeOf: ShapeOf, isString?: boolean): number {
+function valueWidth(v: ValueSnap, heap: Heap, shapeOf: ShapeOf, dialect: Dialect, isString?: boolean): number {
   if (isString || (v.t === 'ref' && shapeOf(heap[v.id]))) return CELL;
-  return formatSnap(v, heap, 1).length * 9.5 + 18;
+  return formatSnap(v, heap, 1, dialect).length * 9.5 + 18;
 }
 
 /** Softly rounded tiles with subtle index labels, gliding pointer markers and an optional left..right window. */
 export function Cells(props: CellsProps) {
   const { items, total, heap, markers, role, isString, shapeOf = conventionShape } = props;
   const glide = useGlide();
+  const dialect = useDialect();
   if (role === 'deque') return <DequeView {...props} />;
   if (role === 'stack' && markers.length === 0) return <StackView {...props} />;
   if (role === 'queue' && markers.length === 0) return <QueueView {...props} />;
@@ -93,7 +97,7 @@ export function Cells(props: CellsProps) {
   const inWindow = (i: number) => !win || (i >= win.from && i <= win.to);
   const slots = lead + items.length + tail + (total > items.length ? 1 : 0);
   // Cells widen to fit their longest value, so a big number is never cut short or spills into a neighbor.
-  const cell = Math.max(CELL, ...items.map((v) => valueWidth(v, heap, shapeOf, isString)));
+  const cell = Math.max(CELL, ...items.map((v) => valueWidth(v, heap, shapeOf, dialect, isString)));
   const step = cell + GAP;
   const width = Math.max(slots, 1) * step;
   // Each marker label gets the first row where it clears the label to its left, so long

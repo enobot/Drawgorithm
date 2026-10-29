@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import type { FrameSnap, Heap } from '../trace/types';
 import { formatSnap } from './analysis';
+import { useDialect } from './dialectContext';
 import type { Focus } from './focus';
 import { GUM_WORD_COLOR } from './illustrated/gumdrop';
 import { POP } from './theme';
@@ -26,13 +27,14 @@ export function StatCards({
   active: boolean;
   comparing: boolean;
 }) {
+  const dialect = useDialect();
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-3">
       {names.map((name) => {
         const v = frame.vars.find((x) => x.name === name);
         const changed = !!v && active && (focus.changed.has(name) || focus.declared.has(name));
         const read = !!v && active && !changed && focus.reads.has(name);
-        const text = v ? formatSnap(v.value, heap) : '–';
+        const text = v ? formatSnap(v.value, heap, 0, dialect) : '–';
         const word = changed ? 'changed' : read ? (comparing ? 'compared' : 'read') : null;
         return (
           <div

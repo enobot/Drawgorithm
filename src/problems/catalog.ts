@@ -1,5 +1,6 @@
 // Built-in examples. Descriptions are written for Drawgorithms; the starter code
-// is ordinary JavaScript that the interpreter runs exactly as edited.
+// is ordinary JavaScript that the interpreter runs exactly as edited, and `python` holds the
+// same program in Python with the same names (run on CPython in engine/python/python.test.ts).
 import { lessonProblemById } from '../learn/problems';
 import { practiceProblemById } from '../practice/problems';
 import type { ExpectSpec, InputKind } from '../trace/types';
@@ -83,6 +84,33 @@ const h = height(root);
       'Attach node 4 somewhere else, such as root.right.right.',
       'Add root.left.left = root on a new line to see how a cycle is drawn.',
     ],
+    python: {
+      starter: `# Build a binary tree. Live Build draws it as you type.
+root = TreeNode(5)
+root.left = TreeNode(3)
+root.right = TreeNode(8)
+root.left.right = TreeNode(4)
+
+
+# Depth-first search: a tree's height is 1 + its taller subtree.
+def height(node):
+    if node is None:
+        return 0
+    left = height(node.left)
+    right = height(node.right)
+    return 1 + max(left, right)
+
+
+h = height(root)
+`,
+      explanation:
+        'height(node) asks each subtree for its height, then adds 1 for the node itself. An empty subtree (None) has height 0, which stops the recursion.',
+      tryThis: [
+        'Change TreeNode(3) to TreeNode(9) and watch the drawing update.',
+        'Attach node 4 somewhere else, such as root.right.right.',
+        'Add root.left.left = root on a new line to see how a cycle is drawn.',
+      ],
+    },
   },
   {
     id: 'variables',
@@ -101,6 +129,14 @@ let b = 5;
 let sum = a + b;
 `,
     tryThis: ['Change b to 10.', 'Add a line: a = a + 1; then compare a and sum.'],
+    python: {
+      starter: `a = 2
+b = 5
+sum = a + b
+`,
+      explanation: 'Each assignment creates a labeled block. a + b reads both blocks, and the result goes into a new block named sum.',
+      tryThis: ['Change b to 10.', 'Add a line: a = a + 1, then compare a and sum.'],
+    },
   },
   {
     id: 'serve-line',
@@ -130,6 +166,31 @@ const waiting = line.length;
       'Swap shift() for pop(). Who gets served now?',
       'Add line.push(1) before the first shift() and watch where the new person stands.',
     ],
+    python: {
+      starter: `from collections import deque
+
+# A ticket counter: join at the back, get served from the front.
+line = deque()
+line.append(7)
+line.append(3)
+line.append(9)
+
+first = line.popleft()  # the person who joined first
+line.append(5)
+second = line.popleft()
+waiting = len(line)
+`,
+      description: [
+        'A ticket counter: people join at the back of the line and are served from the front, first come, first served.',
+        'line is a deque (from collections). append() adds a value at its right end (the back of the line). popleft() removes and returns the leftmost value (the front).',
+      ],
+      explanation:
+        'A queue is first in, first out: whoever joined earliest is served next. With a deque, append() is joining the line and popleft() is being served, and both take constant time.',
+      tryThis: [
+        'Swap popleft() for pop(). Who gets served now?',
+        'Add line.append(1) before the first popleft() and watch where the new person stands.',
+      ],
+    },
   },
   {
     id: 'two-sum',
@@ -169,6 +230,24 @@ const waiting = line.length;
       'Pick the Duplicates case: [3, 3] with target 6.',
       'Move seen.set(nums[i], i) above the if and run the Duplicates case to see the bug it causes.',
     ],
+    python: {
+      starter: `def twoSum(nums, target):
+    seen = {}  # value → index
+
+    for i in range(len(nums)):
+        complement = target - nums[i]
+        if complement in seen:
+            return [seen[complement], i]
+        seen[nums[i]] = i
+    return []
+`,
+      explanation:
+        'Walk through nums once. For each number, compute the complement target − nums[i]. If an earlier number equals the complement, the dict already holds its index. Otherwise, remember this number and its index in the dict.',
+      tryThis: [
+        'Pick the Duplicates case: [3, 3] with target 6.',
+        'Move seen[nums[i]] = i above the if and run the Duplicates case to see the bug it causes.',
+      ],
+    },
     view: { resultIndicesInto: 'nums', mapColumns: ['value', 'index'], scene: 'gumdrops', statCards: ['target', 'complement'] },
   },
   {
@@ -210,6 +289,22 @@ const waiting = line.length;
 }
 `,
     tryThis: ['Try target 12 (the last item) and -1 (the first).', 'Change left <= right to left < right and search for 5 in [5].'],
+    python: {
+      starter: `def search(nums, target):
+    left = 0
+    right = len(nums) - 1
+
+    while left <= right:
+        mid = (left + right) // 2
+        if nums[mid] == target:
+            return mid
+        elif nums[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return -1
+`,
+    },
   },
   {
     id: 'level-order',
@@ -249,6 +344,31 @@ const waiting = line.length;
 }
 `,
     tryThis: ['Swap the two queue.push lines to visit right children first.'],
+    python: {
+      starter: `from collections import deque
+
+
+def levelOrder(root):
+    levels = []
+    if root is None:
+        return levels
+
+    queue = deque([root])
+    while len(queue) > 0:
+        size = len(queue)
+        level = []
+        for _ in range(size):
+            node = queue.popleft()
+            level.append(node.val)
+            if node.left is not None:
+                queue.append(node.left)
+            if node.right is not None:
+                queue.append(node.right)
+        levels.append(level)
+    return levels
+`,
+      tryThis: ['Swap the two queue.append lines to visit right children first.'],
+    },
   },
   {
     id: 'reverse-list',
@@ -282,6 +402,25 @@ const waiting = line.length;
 }
 `,
     tryThis: ['Delete the line const next = curr.next; and use curr = curr.next at the end. What breaks?'],
+    python: {
+      starter: `def reverseList(head):
+    prev = None
+    curr = head
+    while curr is not None:
+        nxt = curr.next
+        curr.next = prev
+        prev = curr
+        curr = nxt
+    return prev
+`,
+      description: [
+        'Given the head of a singly linked list, reverse the list and return the new head.',
+        'The input [1,2,3,4] means 1 → 2 → 3 → 4 → None.',
+      ],
+      explanation:
+        'Walk the list with curr. Before changing curr.next, save the rest of the list in nxt. Then point curr back at prev and move both pointers one step forward.',
+      tryThis: ['Delete the line nxt = curr.next and use curr = curr.next at the end. What breaks?'],
+    },
   },
 ];
 

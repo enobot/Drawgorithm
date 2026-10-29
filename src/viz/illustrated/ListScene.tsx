@@ -2,6 +2,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useMemo } from 'react';
 import type { Heap } from '../../trace/types';
 import { nodeValueLabel, type ListDiagram, type ObjectSnap } from '../analysis';
+import { noneWord } from '../dialect';
+import { useDialect } from '../dialectContext';
 import { listSlots, type ListSlot } from '../listLayout';
 import { useGlide } from '../theme';
 import type { NodeLabel } from '../TreeView';
@@ -94,11 +96,12 @@ export function ListScene({
 }: ListSceneProps) {
   const sketch = useSvgId();
   const glide = useGlide();
+  const dialect = useDialect();
   const places = useMemo(
     () => (slots && diagram.chains.every((c) => c.ids.every((id) => slots.has(id))) ? slots : listSlots([diagram])),
     [slots, diagram],
   );
-  const label = (id: number) => diagram.labels[id] ?? nodeValueLabel(heap[id] as ObjectSnap, heap);
+  const label = (id: number) => diagram.labels[id] ?? nodeValueLabel(heap[id] as ObjectSnap, heap, undefined, dialect);
   const nextOf = (id: number) => diagram.nextField[id] ?? 'next';
   const ids = diagram.chains.flatMap((c) => c.ids);
   let rows = 0;
@@ -122,7 +125,7 @@ export function ListScene({
     .map((c) =>
       [
         ...c.ids.map(label),
-        c.end.kind === 'null' ? 'null' : c.end.kind === 'cycle' ? `(back to ${label(c.end.to)})` : `(joins ${label(c.end.to)})`,
+        c.end.kind === 'null' ? noneWord(dialect) : c.end.kind === 'cycle' ? `(back to ${label(c.end.to)})` : `(joins ${label(c.end.to)})`,
       ].join(' → '),
     )
     .join('   ·   ');
@@ -135,8 +138,8 @@ export function ListScene({
       note={
         <>
           Each person is a node holding its value; the rope in their hand is their <b>{nextOf(ids[0] ?? -1)}</b>, pointing at exactly one
-          person, or hanging loose for null. Simplified: a node doesn't know who points at it, and real nodes have no place in a row. They
-          stay put here so you can watch the ropes change.
+          person, or hanging loose for {noneWord(dialect)}. Simplified: a node doesn't know who points at it, and real nodes have no place
+          in a row. They stay put here so you can watch the ropes change.
         </>
       }
       overlay={overlay ? chainText : undefined}
@@ -207,7 +210,7 @@ export function ListScene({
                 <>
                   <g
                     {...pressable(onSelect ? () => onSelect(id) : undefined)}
-                    aria-label={`node ${label(id)}${names.length ? `, referenced by ${names.join(', ')}` : ''}, ${nextOf(id)} ${isNull ? 'is null' : `points to node ${label(nextIds.get(id)!)}`}`}
+                    aria-label={`node ${label(id)}${names.length ? `, referenced by ${names.join(', ')}` : ''}, ${nextOf(id)} ${isNull ? `is ${noneWord(dialect)}` : `points to node ${label(nextIds.get(id)!)}`}`}
                   >
                     <title>{`node ${label(id)}`}</title>
                     <StickFigure pose={hot ? 'raise' : 'reach'} tone={tone} walking={walking} facing={facing} filter={sketch}>
@@ -221,14 +224,14 @@ export function ListScene({
                   {/* The labels around the person sit outside the button, so the button's visible text is
                       its value, which its name contains (WCAG 2.5.3); the name still says all of this. */}
                   {/* Beside the loose end of the rope, above the ground line. */}
-                  {isNull && <Label x={34} y={-6} text="null" size={15} color="#5b6178" anchor="start" />}
+                  {isNull && <Label x={34} y={-6} text={noneWord(dialect)} size={15} color="#5b6178" anchor="start" />}
                   <Flags x={0} y={-72} names={names} faint={faint} />
                   {note && <Label x={0} y={24} text={note} size={15} color={textTone(tone)} />}
                   {overlay && (
                     <Label
                       x={0}
                       y={note ? 42 : 24}
-                      text={`${nextOf(id)} = ${isNull ? 'null' : `node ${label(nextIds.get(id)!)}`}`}
+                      text={`${nextOf(id)} = ${isNull ? noneWord(dialect) : `node ${label(nextIds.get(id)!)}`}`}
                       size={14}
                       color="#5b6178"
                     />

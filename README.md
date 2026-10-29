@@ -91,11 +91,12 @@ Motion was checked frame by frame in headless Edge: people in the queue scene gl
 
 ## Python
 
-Pick **Python** in the Language menu. Each problem keeps its JavaScript and its Python code separately, so switching back and forth loses nothing; lessons open with their Python demo, and other problems start from a stub for the function and its inputs (`TreeNode`/`ListNode` are provided, `class Solution` methods and snake_case names are found too, and an input named like a reserved word, such as `from`, goes to the parameter `from_`). Exercise answers and walkthroughs are in Python too. Run, Run as I type, the inputs, Check all tests and the drawings work the same way. What differs:
+Pick **Python** in the Language menu. Each problem keeps its JavaScript and its Python code separately, so switching back and forth loses nothing; lessons and the built-in examples open with their Python version, and exercises and pasted problems start from a stub for the function and its inputs (`TreeNode`/`ListNode` are provided, `class Solution` methods and snake_case names are found too, and an input named like a reserved word, such as `from`, goes to the parameter `from_`). Exercise answers and walkthroughs are in Python too. Run, Run as I type, the inputs, Check all tests and the drawings work the same way. What differs:
 
 - Python reports lines, calls and returns, so each step is a line that ran and what it changed (found by comparing the step with the one before). Values that were only read or compared are not highlighted, and checks don't say which way they went.
 - Live Build checks Python's syntax as you type (with CPython's own parser) but draws only JavaScript for now.
-- Format Code is JavaScript only. The built-in examples (not the lessons or exercises) start from a stub in Python, so their notes on the JavaScript starter code are hidden there.
+- The board writes values the way Python prints them (`None`, `True`, `inf`, `{'a': 1}`, `set()`), and hints and notes that name code use Python's (`//`, `len()`, a dict). A run keeps its own language's words after you switch the editor.
+- Format Code is JavaScript only.
 - The same limits apply (2,000 steps, 200 nested calls, the trace size cap, 1,000 output lines, 6 seconds). Loading Python has its own two-minute limit and doesn't count toward a run. A failed download or a page policy that blocks WebAssembly is reported at once.
 - The code runs in a worker without the page; `import js`/`pyodide` is refused. This is a sandbox for your own code in your own browser, not a security boundary for running other people's code.
 

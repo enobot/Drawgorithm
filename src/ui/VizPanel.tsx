@@ -1,4 +1,6 @@
-import { useStore, type ViewStyle, type VizTab } from '../state/store';
+import { displayedRun, shownLanguage, useStore, type ViewStyle, type VizTab } from '../state/store';
+import { dialectOf } from '../viz/dialect';
+import { DialectContext } from '../viz/dialectContext';
 import { BuildView } from './BuildView';
 import { RunView } from './RunView';
 
@@ -26,6 +28,8 @@ export function VizPanel() {
   const viewStyle = useStore((s) => s.viewStyle);
   const setViewStyle = useStore((s) => s.setViewStyle);
   const active = TABS.find((t) => t.id === tab)!;
+  // The Run tab writes values in the words of the run it shows, even after the editor switches language.
+  const runDialect = useStore((s) => dialectOf(displayedRun(s)?.language ?? shownLanguage(s)));
 
   return (
     <div className="@container flex h-full min-h-0 flex-col">
@@ -105,7 +109,13 @@ export function VizPanel() {
         </div>
       </div>
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="min-h-0 flex-1">
-        {tab === 'build' ? <BuildView /> : <RunView />}
+        {tab === 'build' ? (
+          <BuildView />
+        ) : (
+          <DialectContext.Provider value={runDialect}>
+            <RunView />
+          </DialectContext.Provider>
+        )}
       </div>
     </div>
   );

@@ -3,6 +3,8 @@ import { useState } from 'react';
 import type { Effect, Heap, HeapSnap, Step, ValueSnap } from '../../trace/types';
 import { formatSnap, nodeValueLabel, type ObjectSnap } from '../analysis';
 import type { ShapeOf } from '../bindings';
+import type { Dialect } from '../dialect';
+import { useDialect } from '../dialectContext';
 import type { ItemTrack } from './identity';
 import {
   Flags,
@@ -44,37 +46,37 @@ interface QueueSceneProps {
   onRevealLine?: (line: number) => void;
 }
 
-function itemText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): string {
+function itemText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf, dialect: Dialect): string {
   if (v.t === 'ref') {
     const h = heap[v.id];
     const shape = shapeOf(h);
-    if (h && shape) return `node ${nodeValueLabel(h as ObjectSnap, heap, shape)}`;
+    if (h && shape) return `node ${nodeValueLabel(h as ObjectSnap, heap, shape, dialect)}`;
   }
-  return formatSnap(v, heap, 1);
+  return formatSnap(v, heap, 1, dialect);
 }
 
 /** A value in full, for the picked-person line (cards may shorten it; nested values are spelled out). */
-function fullText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): string {
+function fullText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf, dialect: Dialect): string {
   if (v.t === 'ref') {
     const h = heap[v.id];
     const shape = shapeOf(h);
-    if (h && shape) return `node ${nodeValueLabel(h as ObjectSnap, heap, shape)}`;
+    if (h && shape) return `node ${nodeValueLabel(h as ObjectSnap, heap, shape, dialect)}`;
   }
-  return formatSnap(v, heap);
+  return formatSnap(v, heap, 0, dialect);
 }
 
 /** What a person holds: a node reference is a round token with the node's value; anything else is written on a card. */
-function held(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): { text: string; node: boolean } {
+function held(v: ValueSnap, heap: Heap, shapeOf: ShapeOf, dialect: Dialect): { text: string; node: boolean } {
   if (v.t === 'ref') {
     const h = heap[v.id];
     const shape = shapeOf(h);
-    if (h && shape) return { text: nodeValueLabel(h as ObjectSnap, heap, shape), node: true };
+    if (h && shape) return { text: nodeValueLabel(h as ObjectSnap, heap, shape, dialect), node: true };
   }
-  return { text: formatSnap(v, heap, 1), node: false };
+  return { text: formatSnap(v, heap, 1, dialect), node: false };
 }
 
 /**
- * A queue as people waiting at a counter: push() adds someone at the back, shift()
+ * A queue as people waiting at a counter: push() (Python: append()) adds someone at the back, shift() (popleft())
  * serves the person at the front. Driven by the array's recorded adds and removes.
  */
 export function QueueScene({
@@ -92,6 +94,7 @@ export function QueueScene({
   onRevealLine,
 }: QueueSceneProps) {
   const sketch = useSvgId();
+  const dialect = useDialect();
   const [picked, setPicked] = useState<string | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
   const n = arr.items.length;
@@ -101,7 +104,7 @@ export function QueueScene({
   const pickedLine = pickedIndex >= 0 ? joinedLineOf(picked!) : undefined;
   const detail =
     pickedIndex >= 0
-      ? `You picked ${names[0] ?? 'queue'}[${pickedIndex}] = ${fullText(arr.items[pickedIndex], heap, shapeOf)}.${
+      ? `You picked ${names[0] ?? 'queue'}[${pickedIndex}] = ${fullText(arr.items[pickedIndex], heap, shapeOf, dialect)}.${
           pickedLine ? ` It joined the line at line ${pickedLine}.` : ''
         }`
       : 'Tap or press Enter on a person to see their whole value.';
@@ -129,15 +132,22 @@ export function QueueScene({
       label={`${name}: a line of ${n} ${n === 1 ? 'person' : 'people'}`}
       note={
         <>
-          Each person is one item of <b>{name}</b>. push() adds someone at the back; shift() serves the person at the front.
-          {arr.items.some((v) => held(v, heap, shapeOf).node)
+          Each person is one item of <b>{name}</b>.{' '}
+          {dialect === 'python'
+            ? 'append() adds someone at the back; popleft() (or pop(0)) serves the person at the front.'
+            : 'push() adds someone at the back; shift() serves the person at the front.'}
+          {arr.items.some((v) => held(v, heap, shapeOf, dialect).node)
             ? ' A round token is a reference to a node, showing that node’s value.'
             : ''}{' '}
-          Simplified: in a real array every remaining item moves down one index when the front leaves; here the line steps forward.
+          {dialect === 'python'
+            ? 'Simplified: in a list, pop(0) moves every remaining item down one index (a deque does not need to); here the line steps forward.'
+            : 'Simplified: in a real array every remaining item moves down one index when the front leaves; here the line steps forward.'}
         </>
       }
       overlay={
-        overlay ? `${name} = [${arr.items.map((v) => itemText(v, heap, shapeOf)).join(', ')}${arr.total > n ? ', …' : ''}]` : undefined
+        overlay
+          ? `${name} = [${arr.items.map((v) => itemText(v, heap, shapeOf, dialect)).join(', ')}${arr.total > n ? ', …' : ''}]`
+          : undefined
       }
       detail={n > 0 ? detail : undefined}
     >
@@ -155,7 +165,7 @@ export function QueueScene({
       </g>
       <Label x={60} y={GROUND + 22} text="counter" size={15} color="#5b6178" />
       {served && served.type === 'array-remove' && (
-        <Label x={60} y={GROUND - 112} text={`served ${itemText(served.value, heap, shapeOf)}`} color={TONE.current} size={17} />
+        <Label x={60} y={GROUND - 112} text={`served ${itemText(served.value, heap, shapeOf, dialect)}`} color={TONE.current} size={17} />
       )}
 
       {/* The name of the line, over everyone in it. */}
@@ -203,9 +213,9 @@ export function QueueScene({
                     })}
                     onFocus={() => setFocused(id)}
                     onBlur={() => setFocused((f) => (f === id ? null : f))}
-                    aria-label={`${name}[${i}] = ${fullText(v, heap, shapeOf)}${note ? `, just ${note}` : ''}${line ? `, joined the line at line ${line}` : ''}`}
+                    aria-label={`${name}[${i}] = ${fullText(v, heap, shapeOf, dialect)}${note ? `, just ${note}` : ''}${line ? `, joined the line at line ${line}` : ''}`}
                   >
-                    <title>{`${name}[${i}] = ${fullText(v, heap, shapeOf)}${line ? ` (joined at line ${line})` : ''}`}</title>
+                    <title>{`${name}[${i}] = ${fullText(v, heap, shapeOf, dialect)}${line ? ` (joined at line ${line})` : ''}`}</title>
                     {/* Picked: a solid ring. Keyboard focus: a dashed one, so tabbing through the line is visible. */}
                     {(picked === id || focused === id) && (
                       <ellipse
@@ -220,7 +230,7 @@ export function QueueScene({
                       />
                     )}
                     <StickFigure pose="hold" tone={tone} walking={walking} facing={-1} filter={sketch}>
-                      <ValueCard {...held(v, heap, shapeOf)} tone={tone} />
+                      <ValueCard {...held(v, heap, shapeOf, dialect)} tone={tone} />
                     </StickFigure>
                   </g>
                   {/* The labels around the person sit outside the button, so the button's visible text is

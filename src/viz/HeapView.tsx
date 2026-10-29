@@ -7,6 +7,8 @@ import type { Marker } from './analysis';
 import { Cells, SlideIn } from './ArrayView';
 import type { ShapeOf } from './bindings';
 import { formatSnap } from './analysis';
+import type { Dialect } from './dialect';
+import { useDialect } from './dialectContext';
 import { heapDepth, heapLevels, heapParent, heapX, placeTagRows, tagExtent, type ArraySnap } from './structures';
 import { STATE, useGlide, type VisualState } from './theme';
 import { TagGroup, tagsWidth } from './TreeView';
@@ -48,9 +50,9 @@ const STATE_WORD: Partial<Record<VisualState, string>> = { changed: 'changed', c
 const labelWidth = (text: string) => text.length * 9 + 16;
 
 /** "moved 3 from slot 4 to slot 1 and 9 from slot 1 to slot 4": what the step's writes did, in order of the slots written. */
-function movesText(p: HeapViewProps): string | null {
+function movesText(p: HeapViewProps, dialect: Dialect): string | null {
   if (!p.moves.size) return null;
-  const parts = [...p.moves].map(([to, from]) => `${formatSnap(p.arr.items[to], p.heap)} from slot ${from} to slot ${to}`);
+  const parts = [...p.moves].map(([to, from]) => `${formatSnap(p.arr.items[to], p.heap, 0, dialect)} from slot ${from} to slot ${to}`);
   const swapped = p.moves.size === 2 && [...p.moves].every(([to, from]) => p.moves.get(from) === to);
   return swapped
     ? `This step swapped slots ${[...p.moves.keys()].join(' and ')}: ${parts.join(', ')}.`
@@ -60,10 +62,11 @@ function movesText(p: HeapViewProps): string | null {
 export function HeapView(props: HeapViewProps) {
   const { arr, heap, markers, moves } = props;
   const glide = useGlide();
+  const dialect = useDialect();
   const n = arr.items.length;
   const levels = heapLevels(n);
   // Nodes widen into pills for long values (never cut short), and the levels spread out to match.
-  const nodeW = Math.max(NODE, ...arr.items.map((v) => labelWidth(formatSnap(v, heap))));
+  const nodeW = Math.max(NODE, ...arr.items.map((v) => labelWidth(formatSnap(v, heap, 0, dialect))));
   const half = nodeW / 2;
   const span = Math.max(2 ** Math.max(levels - 1, 0), 1) * Math.max(UNIT, nodeW + 16);
   const rawX = (i: number) => heapX(i) * span;
@@ -93,7 +96,7 @@ export function HeapView(props: HeapViewProps) {
   const xOf = (i: number) => rawX(i) + shift;
   const width = maxX - minX + 2 * PAD_X;
   const height = n ? TOP + (levels - 1) * LEVEL + NODE + BOTTOM : 0;
-  const caption = movesText(props);
+  const caption = movesText(props, dialect);
 
   return (
     <div className="flex flex-col gap-3">
@@ -149,7 +152,7 @@ export function HeapView(props: HeapViewProps) {
                 >
                   {tags.length > 0 && <TagGroup tags={tags} spot={spots.get(i) ?? { side: 'center', row: 0 }} />}
                   <div
-                    title={`slot ${i}: ${formatSnap(v, heap)}${word ? `, ${word}` : ''}${i > 0 ? `; parent is slot ${heapParent(i)}` : '; top of the heap'}`}
+                    title={`slot ${i}: ${formatSnap(v, heap, 0, dialect)}${word ? `, ${word}` : ''}${i > 0 ? `; parent is slot ${heapParent(i)}` : '; top of the heap'}`}
                     className={`flex size-full flex-col items-center justify-center rounded-full leading-none transition-shadow duration-300 ${style.fill} ${style.ring}`}
                   >
                     <HeapValue

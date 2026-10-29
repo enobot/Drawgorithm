@@ -2,6 +2,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useId } from 'react';
 import type { Heap } from '../trace/types';
 import { nodeValueLabel, type ObjectSnap, type StructureIssue, type TreeComponent, type TreeDiagram } from './analysis';
+import { noneWord } from './dialect';
+import { useDialect } from './dialectContext';
 import { STATE, useGlide } from './theme';
 import { tidyTreeLayout } from './treeLayout';
 import { useWidth } from './useWidth';
@@ -201,6 +203,7 @@ function TreeComponentView({ comp, available, props }: { comp: TreeComponent; av
     props;
   const markerId = useId().replace(/:/g, '');
   const glide = useGlide();
+  const dialect = useDialect();
   const { nodes, nullAt, width, height: treeHeight } = placeTree(comp, available);
   const isWritten = (from: number, side: string) => written.some((w) => w.objId === from && w.key === side);
   const isHighlightedEdge = (from: number, side: string) => !!highlightedEdges?.some((w) => w.objId === from && w.key === side);
@@ -263,7 +266,7 @@ function TreeComponentView({ comp, available, props }: { comp: TreeComponent; av
                   strokeLinecap="round"
                 />
                 <text x={end.x} y={end.y + 4} textAnchor="middle" className="fill-navy-400" fontSize={12}>
-                  null
+                  {noneWord(dialect)}
                 </text>
               </motion.g>
             );
@@ -336,7 +339,7 @@ function TreeComponentView({ comp, available, props }: { comp: TreeComponent; av
           const isHot = highlighted?.has(n.id);
           const isSelected = selected === n.id;
           const tags = labels.get(n.id) ?? [];
-          const value = props.diagram.labels[n.id] ?? nodeValueLabel(h, heap);
+          const value = props.diagram.labels[n.id] ?? nodeValueLabel(h, heap, undefined, dialect);
           const state = isCurrent ? 'current' : isNew ? 'new' : isVisited ? 'visited' : 'idle';
           const style = STATE[state];
           const describe = [

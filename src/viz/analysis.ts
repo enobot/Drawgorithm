@@ -2,6 +2,7 @@
 // Nothing here guesses values: it only reorganizes what the trace recorded.
 import type { FrameSnap, Heap, HeapSnap, StaticHints, Step, ValueSnap } from '../trace/types';
 import { LIST_CONVENTION, TREE_CONVENTION, type NodeShape, type ShapeOf } from './bindings';
+import { boolWord, noneWord, numberWord, stringWord, type Dialect } from './dialect';
 
 export type ObjectSnap = Extract<HeapSnap, { kind: 'object' }>;
 
@@ -23,18 +24,19 @@ export function refId(v: ValueSnap | undefined): number | null {
   return v && v.t === 'ref' ? v.id : null;
 }
 
-export function formatSnap(v: ValueSnap | undefined, heap: Heap, depth = 0): string {
+/** A value as text, in the words of `dialect` (see dialect.ts). */
+export function formatSnap(v: ValueSnap | undefined, heap: Heap, depth = 0, dialect: Dialect = 'javascript'): string {
   if (!v) return 'undefined';
   switch (v.t) {
     case 'number':
-      return Object.is(v.v, -0) ? '0' : String(v.v);
+      return numberWord(v.v, dialect);
     case 'string':
       // A long string arrives shortened (see engine/snapshot.ts); say so.
-      return v.len ? `${JSON.stringify(v.v)}… (${v.len.toLocaleString('en-US')} characters)` : JSON.stringify(v.v);
+      return v.len ? `${stringWord(v.v, dialect)}… (${v.len.toLocaleString('en-US')} characters)` : stringWord(v.v, dialect);
     case 'boolean':
-      return String(v.v);
+      return boolWord(v.v, dialect);
     case 'null':
-      return 'null';
+      return noneWord(dialect);
     case 'undefined':
       return 'undefined';
     case 'function':
@@ -42,20 +44,32 @@ export function formatSnap(v: ValueSnap | undefined, heap: Heap, depth = 0): str
   }
   const h = heap[v.id];
   if (!h) return '…';
-  if (isTreeObj(h) || isListObj(h)) return `node ${formatSnap(field(h, 'val'), heap, 2)}`;
+  const inner = (x: ValueSnap) => formatSnap(x, heap, depth + 1, dialect);
+  if (isTreeObj(h) || isListObj(h)) return `node ${formatSnap(field(h, 'val'), heap, 2, dialect)}`;
   if (depth > 1) return h.kind === 'array' ? `[…${h.total}]` : '{…}';
   switch (h.kind) {
     case 'array': {
-      const items = h.items.slice(0, 8).map((x) => formatSnap(x, heap, depth + 1));
+      const items = h.items.slice(0, 8).map(inner);
       if (h.total > 8) items.push(`…+${h.total - 8}`);
       return `[${items.join(', ')}]`;
     }
     case 'map':
+      // A Python dict is written with its contents, as Python prints it: {'a': 1, 'b': 2}.
+      if (dialect === 'python') {
+        const items = h.entries.slice(0, 3).map(([k, x]) => `${inner(k)}: ${inner(x)}`);
+        return `{${items.join(', ')}${h.total > 3 ? ', …' : ''}}`;
+      }
       return `Map(${h.total})`;
     case 'set':
+      if (dialect === 'python') {
+        if (!h.total) return 'set()';
+        const items = h.items.slice(0, 8).map(inner);
+        if (h.total > 8) items.push(`…+${h.total - 8}`);
+        return `{${items.join(', ')}}`;
+      }
       return `Set(${h.total})`;
     case 'object': {
-      const items = h.entries.slice(0, 3).map(([k, x]) => `${k}: ${formatSnap(x, heap, depth + 1)}`);
+      const items = h.entries.slice(0, 3).map(([k, x]) => `${k}: ${inner(x)}`);
       return `${h.className && h.className !== 'Object' ? h.className + ' ' : ''}{${items.join(', ')}${h.entries.length > 3 ? ', …' : ''}}`;
     }
   }
@@ -65,10 +79,15 @@ export function formatSnap(v: ValueSnap | undefined, heap: Heap, depth = 0): str
 export const conventionShape: ShapeOf = (h) => (isTreeObj(h) ? TREE_CONVENTION : isListObj(h) ? LIST_CONVENTION : null);
 
 /** Display label of a tree or list node: its value, e.g. `5`. */
-export function nodeValueLabel(h: ObjectSnap, heap: Heap, shape: NodeShape | null = conventionShape(h)): string {
+export function nodeValueLabel(
+  h: ObjectSnap,
+  heap: Heap,
+  shape: NodeShape | null = conventionShape(h),
+  dialect: Dialect = 'javascript',
+): string {
   const v = field(h, shape && shape.kind !== 'object' ? shape.value : 'val');
   if (v?.t === 'string') return v.v;
-  return formatSnap(v, heap, 2);
+  return formatSnap(v, heap, 2, dialect);
 }
 
 /** Ids held inside arrays, maps, sets and plain objects (a node in a queue is not detached). */
@@ -147,13 +166,14 @@ export function buildTreeDiagram(
   rootOrder: number[],
   referenced: Set<number>,
   shapeOf: ShapeOf = conventionShape,
+  dialect: Dialect = 'javascript',
 ): TreeDiagram {
   const isTree = (h: HeapSnap | undefined) => shapeOf(h)?.kind === 'tree';
   const treeIds = Object.values(heap)
     .filter(isTree)
     .map((h) => h.id);
   const labels: Record<number, string> = {};
-  for (const id of treeIds) labels[id] = nodeValueLabel(heap[id] as ObjectSnap, heap, shapeOf(heap[id]));
+  for (const id of treeIds) labels[id] = nodeValueLabel(heap[id] as ObjectSnap, heap, shapeOf(heap[id]), dialect);
   if (!treeIds.length) return { components: [], issues: [], labels };
   const label = (id: number) => `node ${labels[id]}`;
   const sideField = (id: number, side: 'left' | 'right') => (shapeOf(heap[id]) as TreeShape)[side];
@@ -279,6 +299,7 @@ export function buildListDiagram(
   rootOrder: number[],
   referenced: Set<number>,
   shapeOf: ShapeOf = conventionShape,
+  dialect: Dialect = 'javascript',
 ): ListDiagram {
   const isList = (h: HeapSnap | undefined) => shapeOf(h)?.kind === 'list';
   const listIds = Object.values(heap)
@@ -287,7 +308,7 @@ export function buildListDiagram(
   const labels: Record<number, string> = {};
   const nextField: Record<number, string> = {};
   for (const id of listIds) {
-    labels[id] = nodeValueLabel(heap[id] as ObjectSnap, heap, shapeOf(heap[id]));
+    labels[id] = nodeValueLabel(heap[id] as ObjectSnap, heap, shapeOf(heap[id]), dialect);
     nextField[id] = (shapeOf(heap[id]) as ListShape).next;
   }
   if (!listIds.length) return { chains: [], issues: [], labels, nextField };
@@ -317,7 +338,7 @@ export function buildListDiagram(
         issues.push({
           kind: 'cycle',
           ids: [ids[ids.length - 1], cur],
-          text: `Cycle: ${label(ids[ids.length - 1])}'s ${nextField[ids[ids.length - 1]]} points back to ${label(cur)}. Walking this list would never reach null.`,
+          text: `Cycle: ${label(ids[ids.length - 1])}'s ${nextField[ids[ids.length - 1]]} points back to ${label(cur)}. Walking this list would never reach ${noneWord(dialect)}.`,
         });
         break;
       }
@@ -426,7 +447,12 @@ export interface TraversalIndex {
   returns: { step: number; node: number; value: string }[];
 }
 
-export function buildTraversalIndex(steps: Step[], shapeOf: ShapeOf = conventionShape, walkers: string[] = []): TraversalIndex {
+export function buildTraversalIndex(
+  steps: Step[],
+  shapeOf: ShapeOf = conventionShape,
+  walkers: string[] = [],
+  dialect: Dialect = 'javascript',
+): TraversalIndex {
   const current: (number | null)[] = [];
   const firstVisit = new Map<number, number>();
   const returns: TraversalIndex['returns'] = [];
@@ -439,7 +465,7 @@ export function buildTraversalIndex(steps: Step[], shapeOf: ShapeOf = convention
       const param = frame?.vars.find((v) => v.declKind === 'param');
       const id = param ? refId(param.value) : null;
       if (id !== null && shapeOf(s.heap[id])?.kind === 'tree' && frame.returning) {
-        returns.push({ step: i, node: id, value: formatSnap(frame.returning, s.heap) });
+        returns.push({ step: i, node: id, value: formatSnap(frame.returning, s.heap, 0, dialect) });
       }
     }
   });

@@ -4,6 +4,8 @@
 // labels sit outside the circle, where no edge runs.
 import { AnimatePresence, motion } from 'motion/react';
 import { useId } from 'react';
+import { boolWord, noneWord, type Dialect } from './dialect';
+import { useDialect } from './dialectContext';
 import { circleLayout, type GraphActivity, type GraphModel, type GraphOverlay } from './structures';
 import { STATE, useGlide, type VisualState } from './theme';
 import { tagsWidth } from './TreeView';
@@ -45,6 +47,7 @@ const badgeWidth = (text: string) => 14 + text.length * 6.6;
 
 export function GraphView({ model, overlay, activity, changes, order }: GraphViewProps) {
   const glide = useGlide();
+  const dialect = useDialect();
   const markerId = useId().replace(/:/g, '');
   // Places on the circle: every vertex of the run (when known), so none moves when others appear.
   const ring = [...new Set([...(order ?? []), ...model.nodes.map((n) => n.key)])];
@@ -58,7 +61,7 @@ export function GraphView({ model, overlay, activity, changes, order }: GraphVie
     for (const f of overlay.frontier.get(n.key) ?? []) badges.push({ text: `${f.name}[${f.pos}]`, tone: 'frontier' });
     for (const v of overlay.values) {
       const x = v.byNode.get(n.key);
-      if (x) badges.push({ text: `${v.name} ${showValue(x)}`, tone: 'value' });
+      if (x) badges.push({ text: `${v.name} ${showValue(x, dialect)}`, tone: 'value' });
     }
     for (const c of changes.get(n.key) ?? []) badges.push({ text: c, tone: 'change' });
     labels.set(n.key, { tags: overlay.tags.get(n.key) ?? [], badges });
@@ -144,7 +147,7 @@ export function GraphView({ model, overlay, activity, changes, order }: GraphVie
   if (activity.checked.length) legend.push('Violet edges: the neighbor entries this step read.');
   if (activity.added.length) legend.push('Amber edges: added in this step.');
   if (overlay.values.some((v) => [...v.byNode.values()].some((x) => x.t === 'number' && !Number.isFinite(x.v)))) {
-    legend.push('∞ is Infinity, as the code stored it.');
+    legend.push(`∞ is ${dialect === 'python' ? 'inf' : 'Infinity'}, as the code stored it.`);
   }
 
   return (
@@ -358,7 +361,7 @@ export function GraphView({ model, overlay, activity, changes, order }: GraphVie
   );
 }
 
-const showValue = (v: { t: string; v?: unknown }) =>
+const showValue = (v: { t: string; v?: unknown }, dialect: Dialect) =>
   v.t === 'number'
     ? Number.isFinite(v.v as number)
       ? String(v.v)
@@ -368,8 +371,10 @@ const showValue = (v: { t: string; v?: unknown }) =>
     : v.t === 'string'
       ? String(v.v)
       : v.t === 'boolean'
-        ? String(v.v)
-        : v.t;
+        ? boolWord(v.v as boolean, dialect)
+        : v.t === 'null'
+          ? noneWord(dialect)
+          : v.t;
 
 /** A straight edge between two vertex outlines; an arrow stops a little short so its head shows. */
 function trim(x1: number, y1: number, x2: number, y2: number, arrow: boolean, w1: number, w2: number): [number, number, number, number] {

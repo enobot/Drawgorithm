@@ -3,6 +3,7 @@
 // never the source code. Conventions are applied only when they are unambiguous;
 // otherwise the user is asked, and the user's choices always win.
 import type { FrameSnap, Heap, HeapSnap, StaticHints } from '../trace/types';
+import type { Dialect } from './dialect';
 import {
   ADJACENCY_NAMES,
   DEQUE_NAMES,
@@ -200,6 +201,7 @@ function detectArrayRole(
   arr: Extract<HeapSnap, { kind: 'array' }>,
   heap: Heap,
   hints: StaticHints,
+  dialect: Dialect = 'javascript',
 ): { role: ArrayRole; source: BindingSource; reason: string } {
   const usage = hints.usage;
   // A heap is pushed and popped like a stack; its name or its slot arithmetic says it is a heap.
@@ -218,9 +220,14 @@ function detectArrayRole(
     };
   }
   if (hints.deques?.includes(name)) {
-    return { role: 'deque', source: 'code', reason: `the code takes items off both ends (${name}.pop() and ${name}.shift() or unshift())` };
+    const ends =
+      dialect === 'python' ? `${name}.pop() and ${name}.popleft() or appendleft()` : `${name}.pop() and ${name}.shift() or unshift()`;
+    return { role: 'deque', source: 'code', reason: `the code takes items off both ends (${ends})` };
   }
-  if (hints.queues.includes(name)) return { role: 'queue', source: 'code', reason: `the code calls ${name}.shift()` };
+  if (hints.queues.includes(name)) {
+    const front = dialect === 'python' ? `${name}.popleft() or ${name}.pop(0)` : `${name}.shift()`;
+    return { role: 'queue', source: 'code', reason: `the code calls ${front}` };
+  }
   if (hints.stacks.includes(name)) return { role: 'stack', source: 'code', reason: `the code calls ${name}.pop()` };
   if (UNION_FIND_NAMES.includes(name) && isParentArray(arr)) {
     return {
@@ -265,6 +272,7 @@ export function resolveBindings(
   frames: FrameSnap[],
   hints: StaticHints,
   overrides: BindingOverrides = NO_OVERRIDES,
+  dialect: Dialect = 'javascript',
 ): ResolvedBindings {
   const groups = new Map<string, Extract<HeapSnap, { kind: 'object' }>[]>();
   for (const h of Object.values(heap)) {
@@ -321,7 +329,7 @@ export function resolveBindings(
       seen.add(v.name);
       const arr = heap[v.value.id] as Extract<HeapSnap, { kind: 'array' }>;
       const o = overrides.arrays[v.name] ?? {};
-      const detected = detectArrayRole(v.name, arr, heap, hints);
+      const detected = detectArrayRole(v.name, arr, heap, hints, dialect);
       const role = o.role ?? detected.role;
       const detectedPointers = (hints.pointers[v.name] ?? []).map((p) => p.name);
       const candidates = f.vars

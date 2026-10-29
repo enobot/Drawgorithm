@@ -1,5 +1,6 @@
 import type { OutputLine, Step } from '../trace/types';
 import { formatSnap } from '../viz/analysis';
+import { useDialect } from '../viz/dialectContext';
 import { focusOf } from '../viz/focus';
 import { NameTag } from '../viz/Value';
 
@@ -8,6 +9,7 @@ export function Inspector({ step, output }: { step: Step; output: OutputLine[] }
   const frame = step.frames[step.frames.length - 1];
   const focus = focusOf(step);
   const printed = output.slice(0, step.outputCount);
+  const dialect = useDialect();
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <section aria-label="Variables" className="min-w-0">
@@ -20,7 +22,7 @@ export function Inspector({ step, output }: { step: Step; output: OutputLine[] }
                   <td className="py-0.5 pr-2 align-top">
                     <NameTag name={v.name} />
                   </td>
-                  <td className="py-0.5 font-mono text-navy-100 break-all">{formatSnap(v.value, step.heap)}</td>
+                  <td className="py-0.5 font-mono text-navy-100 break-all">{formatSnap(v.value, step.heap, 0, dialect)}</td>
                 </tr>
               ))}
             </tbody>

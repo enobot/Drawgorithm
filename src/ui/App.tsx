@@ -10,6 +10,8 @@ import { withoutDeepLink, type Pane } from '../state/deepLink';
 import { canAutoRun } from '../state/live';
 import { currentWork, displayedRun, shownCode, shownLanguage, useStore } from '../state/store';
 import type { LiveResult } from '../trace/types';
+import { dialectOf } from '../viz/dialect';
+import { DialectContext } from '../viz/dialectContext';
 import { EngineStopped, liveInWorker } from '../worker/client';
 import { EditorPanel } from './EditorPanel';
 import { ProblemPanel } from './ProblemPanel';
@@ -398,6 +400,8 @@ export function App() {
   // Sign-in is optional: without a Supabase project in .env.local it stays off and the app works the same.
   useEffect(() => connectAuth(authClient), []);
   const [tools, setTools] = useState<HTMLDivElement | null>(null);
+  // Values are written in the words of the code on screen; the Run tab uses the language of the run it shows.
+  const dialect = useStore((s) => dialectOf(shownLanguage(s)));
 
   return (
     <MotionConfig reducedMotion="user">
@@ -410,7 +414,9 @@ export function App() {
           <div ref={setTools} className="ml-auto flex items-center" />
           <AccountButton />
         </header>
-        {mode === 'wide' ? <DesktopLayout tools={tools} /> : mode === 'medium' ? <MediumLayout /> : <NarrowLayout />}
+        <DialectContext.Provider value={dialect}>
+          {mode === 'wide' ? <DesktopLayout tools={tools} /> : mode === 'medium' ? <MediumLayout /> : <NarrowLayout />}
+        </DialectContext.Provider>
         <AuthDialog />
       </div>
     </MotionConfig>

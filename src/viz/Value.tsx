@@ -3,6 +3,8 @@ import type { ComputeDetail, DeclKind, Heap, ValueSnap } from '../trace/types';
 import { conventionShape, formatSnap, nodeValueLabel, type ObjectSnap } from './analysis';
 import type { ShapeOf } from './bindings';
 import { varColor } from './colors';
+import { boolWord, noneWord } from './dialect';
+import { useDialect } from './dialectContext';
 import { POP, STATE, type VisualState } from './theme';
 
 /**
@@ -22,10 +24,11 @@ export function ValueText({
   shapeOf?: ShapeOf;
   compact?: boolean;
 }) {
+  const dialect = useDialect();
   if (!v) return <span className={`text-navy-400 italic ${className}`}>undefined</span>;
   switch (v.t) {
     case 'number':
-      return <span className={`text-navy-100 tabular-nums ${className}`}>{formatSnap(v, heap)}</span>;
+      return <span className={`text-navy-100 tabular-nums ${className}`}>{formatSnap(v, heap, 0, dialect)}</span>;
     case 'string':
       return (
         <span
@@ -37,17 +40,18 @@ export function ValueText({
         </span>
       );
     case 'boolean':
-      return <span className={`text-violet-200 ${className}`}>{String(v.v)}</span>;
+      return <span className={`text-violet-200 ${className}`}>{boolWord(v.v, dialect)}</span>;
     case 'null':
+      return <span className={`text-navy-400 italic ${className}`}>{noneWord(dialect)}</span>;
     case 'undefined':
-      return <span className={`text-navy-400 italic ${className}`}>{v.t}</span>;
+      return <span className={`text-navy-400 italic ${className}`}>undefined</span>;
     case 'function':
       return <span className={`text-navy-300 ${className}`}>ƒ {v.name}</span>;
     case 'ref': {
       const h = heap[v.id];
       const shape = shapeOf(h);
       if (h && shape) {
-        return <span className={`text-navy-100 ${className}`}>→ node {nodeValueLabel(h as ObjectSnap, heap, shape)}</span>;
+        return <span className={`text-navy-100 ${className}`}>→ node {nodeValueLabel(h as ObjectSnap, heap, shape, dialect)}</span>;
       }
       if (compact && h?.kind === 'object')
         return (
@@ -55,7 +59,7 @@ export function ValueText({
             {h.className ?? 'object'} {'{…}'}
           </span>
         );
-      return <span className={`text-navy-200 ${className}`}>{formatSnap(v, heap, compact ? 1 : 0)}</span>;
+      return <span className={`text-navy-200 ${className}`}>{formatSnap(v, heap, compact ? 1 : 0, dialect)}</span>;
     }
   }
 }
@@ -71,6 +75,8 @@ const BLOCK_STATE: Record<BlockState, { visual: VisualState; label: string | nul
 };
 
 const DECL_LABEL: Partial<Record<DeclKind, string>> = { const: 'const', let: 'let', var: 'var', param: 'input' };
+// Python has no declaration keywords: its variables show only whether they are inputs.
+const PYTHON_DECL_LABEL: Partial<Record<DeclKind, string>> = { param: 'input' };
 
 interface VarBlockProps {
   name: string;
@@ -100,6 +106,8 @@ export function VarBlock({
   shapeOf = conventionShape,
   details = false,
 }: VarBlockProps) {
+  const dialect = useDialect();
+  const declLabel = (dialect === 'python' ? PYTHON_DECL_LABEL : DECL_LABEL)[declKind];
   const color = varColor(name);
   const s = BLOCK_STATE[state];
   const style = STATE[s.visual];
@@ -115,7 +123,7 @@ export function VarBlock({
       <div className="flex items-center gap-1.5 px-0.5">
         <span aria-hidden className={`size-2 rounded-full ${color.bg}`} />
         <span className={`text-[14px] font-bold ${color.text}`}>{name}</span>
-        {details && DECL_LABEL[declKind] && <span className="text-[11px] text-navy-400">{DECL_LABEL[declKind]}</span>}
+        {details && declLabel && <span className="text-[11px] text-navy-400">{declLabel}</span>}
       </div>
       <motion.button
         type="button"
@@ -129,7 +137,7 @@ export function VarBlock({
         className={`flex items-center justify-center transition-shadow disabled:cursor-default ${style.fill} ${style.ring} ${
           isNodeRef ? 'h-10 rounded-full px-3.5 text-[14px] font-semibold' : 'h-12 min-w-12 rounded-2xl px-3.5 text-[18px] font-bold'
         }`}
-        aria-label={`${name} = ${formatSnap(value, heap)}${s.label ? `, ${s.label}` : ''}`}
+        aria-label={`${name} = ${formatSnap(value, heap, 0, dialect)}${s.label ? `, ${s.label}` : ''}`}
       >
         <ValueText v={value} heap={heap} shapeOf={shapeOf} compact />
       </motion.button>

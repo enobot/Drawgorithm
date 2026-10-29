@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useMemo } from 'react';
 import type { Heap, Step } from '../trace/types';
 import { formatSnap } from './analysis';
+import { useDialect } from './dialectContext';
 import { naryLayout, readCallTree, type CallNode, type CallTree } from './structures';
 import { STATE, useGlide, type VisualState } from './theme';
 
@@ -35,13 +36,14 @@ export interface CallTreeViewProps {
 
 export function CallTreeView({ tree, step, heap }: CallTreeViewProps) {
   const glide = useGlide();
+  const dialect = useDialect();
   const visible = [...tree.nodes.values()].filter((n) => n.start <= step.index);
   const shown = new Set(visible.map((n) => n.id));
   const single = tree.recursive.length === 1;
   const textOf = (n: CallNode) => shorten(single && n.args ? n.args : n.label, MAX_TEXT);
   const returnOf = (n: CallNode) =>
     n.returnedAt !== null && n.returnedAt <= step.index && n.returned && n.returned.t !== 'undefined'
-      ? shorten(formatSnap(n.returned, heap), 16)
+      ? shorten(formatSnap(n.returned, heap, 0, dialect), 16)
       : null;
 
   const onStack = new Set(step.frames.map((f) => f.id).filter((id) => shown.has(id)));
@@ -65,7 +67,7 @@ export function CallTreeView({ tree, step, heap }: CallTreeViewProps) {
     [
       n.label,
       n.id === active ? 'running now' : onStack.has(n.id) ? 'waiting for the calls below it' : n.end < step.index ? 'finished' : '',
-      returnOf(n) !== null ? `returned ${formatSnap(n.returned!, heap)}` : '',
+      returnOf(n) !== null ? `returned ${formatSnap(n.returned!, heap, 0, dialect)}` : '',
       n.repeatOf !== null ? 'the same call was made before' : '',
     ]
       .filter(Boolean)

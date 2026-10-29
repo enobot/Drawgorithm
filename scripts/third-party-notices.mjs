@@ -33,18 +33,32 @@ for (const [key, entry] of Object.entries(lock.packages).sort(([a], [b]) => a.lo
   );
 }
 
+// The pyodide npm package includes no licence file, so the LICENSE files of Pyodide and of the
+// CPython inside it are kept in scripts/licences/, named by version. Upgrading pyodide stops this
+// script until the matching files are added, so the notices never show another version's text.
+function licenceText(file, url) {
+  const path = join('scripts/licences', file);
+  if (!existsSync(path)) {
+    console.error(`${path} is missing: save ${url} there, then run this script again.`);
+    process.exit(1);
+  }
+  return readFileSync(path, 'utf8').replace(/\r\n?/g, '\n').trim();
+}
+
 // Inside pyodide (served from /pyodide/): CPython compiled to WebAssembly and its standard library.
 sections.push(
   [
     `Pyodide ${pyodideVersion} (MPL-2.0), served unmodified from /pyodide/`,
     `The Source Code Form is available at https://github.com/pyodide/pyodide/tree/${pyodideVersion} and is governed by the`,
     'Mozilla Public License, version 2.0: https://www.mozilla.org/MPL/2.0/',
+    licenceText(`pyodide-${pyodideVersion}-LICENSE.txt`, `https://raw.githubusercontent.com/pyodide/pyodide/${pyodideVersion}/LICENSE`),
   ].join('\n'),
   [
     `CPython ${pythonVersion} (PSF License Agreement and the licences of incorporated software), inside Pyodide`,
     'Copyright © 2001 Python Software Foundation; All Rights Reserved.',
-    `Licence terms: https://docs.python.org/${pythonVersion.split('.').slice(0, 2).join('.')}/license.html`,
+    `Licences and acknowledgements for incorporated software: https://docs.python.org/${pythonVersion.split('.').slice(0, 2).join('.')}/license.html`,
     `Source: https://github.com/python/cpython/tree/v${pythonVersion}`,
+    licenceText(`cpython-${pythonVersion}-LICENSE.txt`, `https://raw.githubusercontent.com/python/cpython/v${pythonVersion}/LICENSE`),
   ].join('\n'),
 );
 

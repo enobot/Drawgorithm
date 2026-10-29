@@ -1,6 +1,7 @@
 import type { Heap, LiveObjectInfo, Step } from '../trace/types';
 import { conventionShape, nodeValueLabel, type ObjectSnap } from '../viz/analysis';
 import type { ShapeOf } from '../viz/bindings';
+import { useDialect } from '../viz/dialectContext';
 import { referencePaths } from '../viz/paths';
 import { useStore } from '../state/store';
 
@@ -35,6 +36,7 @@ function LineButton({ line, text }: { line: number; text: string }) {
 
 /** What the selected node is, who points at it, and which lines of code made it so. */
 export function NodeDetails({ id, step, heap, shapeOf = conventionShape, info, visited, returned, onClose }: Props) {
+  const dialect = useDialect();
   const h = heap[id] as ObjectSnap | undefined;
   if (!h) return null;
   const paths = referencePaths(id, step.frames, heap);
@@ -44,7 +46,7 @@ export function NodeDetails({ id, step, heap, shapeOf = conventionShape, info, v
     <aside aria-label="Selected node" className="rounded-xl border border-violet-400/50 bg-navy-900 p-3">
       <div className="flex items-start justify-between gap-3">
         <h3 className="text-[14px] font-semibold text-navy-100">
-          Node {nodeValueLabel(h, heap, shape)}{' '}
+          Node {nodeValueLabel(h, heap, shape, dialect)}{' '}
           <span className="font-normal text-navy-400">
             ({h.className ?? 'object'}, drawn as a {kind})
           </span>

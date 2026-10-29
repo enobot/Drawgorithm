@@ -7,6 +7,7 @@ import { CUSTOM_ID, currentWork, problemFor, useStore, workLanguage, type InputR
 import type { FrameSnap, InputKind, Step } from '../trace/types';
 import { buildListDiagram, buildTreeDiagram, nodeLabels, refId } from '../viz/analysis';
 import { Cells } from '../viz/ArrayView';
+import { useDialect } from '../viz/dialectContext';
 import { EMPTY_FOCUS } from '../viz/focus';
 import { ListView } from '../viz/ListView';
 import { TreeView } from '../viz/TreeView';
@@ -70,6 +71,7 @@ function InputPicture({ row, pos, listName }: { row: InputRow; pos: number; list
     () => (parsed.ok && row.kind !== 'pos' ? previewHeap(parsed.value, row.kind, pos) : null),
     [parsed.ok, parsed.value, row.kind, pos],
   );
+  const dialect = useDialect();
   if (row.kind === 'pos') {
     return (
       <p className="text-[12.5px] text-navy-300">
@@ -97,7 +99,7 @@ function InputPicture({ row, pos, listName }: { row: InputRow; pos: number; list
       return (
         <FitWidth>
           <TreeView
-            diagram={buildTreeDiagram(heap, [id], new Set([id]))}
+            diagram={buildTreeDiagram(heap, [id], new Set([id]), undefined, dialect)}
             heap={heap}
             labels={labels}
             written={EMPTY_FOCUS.propWrites}
@@ -108,7 +110,13 @@ function InputPicture({ row, pos, listName }: { row: InputRow; pos: number; list
     }
     return (
       <FitWidth>
-        <ListView diagram={buildListDiagram(heap, [id], new Set([id]))} heap={heap} labels={labels} written={[]} created={new Set()} />
+        <ListView
+          diagram={buildListDiagram(heap, [id], new Set([id]), undefined, dialect)}
+          heap={heap}
+          labels={labels}
+          written={[]}
+          created={new Set()}
+        />
       </FitWidth>
     );
   }

@@ -4,6 +4,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import type { Heap } from '../trace/types';
 import { formatSnap } from './analysis';
+import { useDialect } from './dialectContext';
 import { placeTagRows, tagExtent, type NodeTag, type TrieActivity, type TrieModel } from './structures';
 import { STATE, useGlide, type VisualState } from './theme';
 import { TagGroup, tagsWidth } from './TreeView';
@@ -28,6 +29,7 @@ export interface TrieViewProps {
 
 export function TrieView({ model, heap, tags, activity, created }: TrieViewProps) {
   const glide = useGlide();
+  const dialect = useDialect();
   const { nodes, spots } = model;
   const rawX = (id: number) => spots.get(id)!.x * UNIT;
   const yOf = (id: number) => TOP + spots.get(id)!.depth * LEVEL + R;
@@ -113,7 +115,7 @@ export function TrieView({ model, heap, tags, activity, created }: TrieViewProps
             const describe = [
               isRoot ? 'root of the trie' : `node for "${word}"`,
               n.terminal ? `a word ends here (${n.terminalField})` : '',
-              ...n.extras.map((x) => `${x.key} ${formatSnap(x.value, heap)}`),
+              ...n.extras.map((x) => `${x.key} ${formatSnap(x.value, heap, 0, dialect)}`),
               t.length ? `held by ${t.map((x) => x.name).join(', ')}` : '',
             ]
               .filter(Boolean)
@@ -144,7 +146,7 @@ export function TrieView({ model, heap, tags, activity, created }: TrieViewProps
                   {counter && (
                     // Low enough to clear a variable tag above the node.
                     <span className="absolute -right-2.5 -top-1 rounded-full bg-navy-700 px-1 text-[9.5px] font-bold leading-4 text-navy-100 shadow-[inset_0_0_0_1px_rgb(166_181_210/0.5)]">
-                      {formatSnap(counter.value, heap, 2)}
+                      {formatSnap(counter.value, heap, 2, dialect)}
                     </span>
                   )}
                 </div>

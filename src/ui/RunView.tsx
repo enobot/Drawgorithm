@@ -6,6 +6,8 @@ import type { EngineError, Step, StepKind } from '../trace/types';
 import { buildTraversalIndex, traversalAt } from '../viz/analysis';
 import { CallStack, IllustratedNote, ResultBanner, Structures, type BoardContext } from '../viz/Board';
 import { CallTreeSection } from '../viz/CallTreeView';
+import { boolWord } from '../viz/dialect';
+import { useDialect } from '../viz/dialectContext';
 import { focusOf } from '../viz/focus';
 import { listSlotsForSteps } from '../viz/listLayout';
 import { NO_OVERRIDES, resolveBindings } from '../viz/bindings';
@@ -43,6 +45,7 @@ const ERROR_TITLE: Record<EngineError['kind'], string> = {
 const forAnswer = (text: string) => text.replace(/^Your code/, 'The answer').replace(/\byour code\b/g, 'the answer');
 
 function Explanation({ step, walking }: { step: Step; walking: boolean }) {
+  const dialect = useDialect();
   const tone =
     step.kind === 'error'
       ? 'border-rose-400/60 bg-rose-400/10'
@@ -58,7 +61,7 @@ function Explanation({ step, walking }: { step: Step; walking: boolean }) {
         {step.loc && <span className="rounded bg-navy-800 px-1.5 font-mono text-navy-300">line {step.loc.line}</span>}
         {step.outcome !== undefined && (
           <span className={`rounded px-1.5 font-semibold ${step.outcome ? 'bg-teal-400/20 text-teal-200' : 'bg-navy-700 text-navy-200'}`}>
-            {step.outcome ? 'true' : 'false'}
+            {boolWord(step.outcome, dialect)}
           </span>
         )}
       </div>
@@ -167,12 +170,13 @@ export function RunView() {
   const sideBySide = useMedia(SHORT_WIDE);
   const display = useMemo(() => displayedRun({ run, problemId }), [run, problemId]);
   const result = display?.result ?? null;
+  const dialect = useDialect();
   const problem = problemFor(problemId, custom);
   const overrides = useStore((s) => s.bindings[s.problemId]) ?? NO_OVERRIDES;
   const step = result?.steps[Math.min(index, result.steps.length - 1)];
   const bindings = useMemo(
-    () => (result && step ? resolveBindings(step.heap, step.frames, result.hints, overrides) : null),
-    [result, step, overrides],
+    () => (result && step ? resolveBindings(step.heap, step.frames, result.hints, overrides, dialect) : null),
+    [result, step, overrides, dialect],
   );
   // Traversal state (visited, returned values) and list node places are read through the bindings of the final state.
   const runShapeOf = useMemo(() => {
@@ -181,8 +185,8 @@ export function RunView() {
     return resolveBindings(last.heap, last.frames, result.hints, overrides).shapeOf;
   }, [result, overrides]);
   const traversal = useMemo(
-    () => (result && runShapeOf ? buildTraversalIndex(result.steps, runShapeOf, result.hints.usage?.walkers) : null),
-    [result, runShapeOf],
+    () => (result && runShapeOf ? buildTraversalIndex(result.steps, runShapeOf, result.hints.usage?.walkers, dialect) : null),
+    [result, runShapeOf, dialect],
   );
   // List nodes keep one place for the whole run, so re-pointing `next` moves arrows, not boxes.
   const listPlaces = useMemo(() => (result && runShapeOf ? listSlotsForSteps(result.steps, runShapeOf) : undefined), [result, runShapeOf]);

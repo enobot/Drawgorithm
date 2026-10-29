@@ -23,6 +23,7 @@ import {
   trieTags,
   type ArraySnap,
 } from './structures';
+import { useDialect } from './dialectContext';
 import { GLIDE } from './theme';
 import { TrieView } from './TrieView';
 import { NameTag } from './Value';
@@ -80,6 +81,7 @@ function Unreadable({ text }: { text: string }) {
 
 function SpecialBody({ id, b, ctx }: { id: number; b: StructureBinding; ctx: SpecialContext }) {
   const { step, hints, focus, roles } = ctx;
+  const dialect = useDialect();
   const h = step.heap[id];
   if (!h) return null;
   const reads = focus.cellReads.get(id) ?? new Set<number>();
@@ -125,14 +127,16 @@ function SpecialBody({ id, b, ctx }: { id: number; b: StructureBinding; ctx: Spe
     case 'graph':
     case 'edge-list': {
       const as = b.role === 'edge-list' ? 'edge-list' : 'adjacency';
-      const model = readGraph(h, step.heap, as, b.vertexCount);
+      const model = readGraph(h, step.heap, as, b.vertexCount, dialect);
       if (!model) {
         return (
           <Unreadable
             text={
               as === 'edge-list'
                 ? `${name} can't be read as an edge list: every item must be a pair [u, v] (or [u, v, weight]) of vertex numbers or names.`
-                : `${name} can't be read as a graph: it must list neighbors per vertex (an array of arrays of vertex numbers, or a Map or object of arrays).`
+                : dialect === 'python'
+                  ? `${name} can't be read as a graph: it must list neighbors per vertex (a list of lists of vertex numbers, or a dict of lists).`
+                  : `${name} can't be read as a graph: it must list neighbors per vertex (an array of arrays of vertex numbers, or a Map or object of arrays).`
             }
           />
         );

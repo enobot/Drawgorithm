@@ -2,6 +2,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useId, useMemo } from 'react';
 import type { Heap } from '../trace/types';
 import { nodeValueLabel, type ListDiagram, type ObjectSnap } from './analysis';
+import { noneWord } from './dialect';
+import { useDialect } from './dialectContext';
 import { listSlots, type ListSlot } from './listLayout';
 import { STATE, useGlide } from './theme';
 import { IssueList, type NodeLabel } from './TreeView';
@@ -78,13 +80,14 @@ function linkPath(from: Box, to: Box): string {
 export function ListView({ diagram, heap, labels, current, written, created, highlighted, selected, onSelect, slots }: ListViewProps) {
   const markerId = useId().replace(/:/g, '');
   const glide = useGlide();
+  const dialect = useDialect();
   const ids = diagram.chains.flatMap((c) => c.ids);
   // Places kept for the run when they cover this state; otherwise this state's own chain layout.
   const places = useMemo(
     () => (slots && diagram.chains.every((c) => c.ids.every((id) => slots.has(id))) ? slots : listSlots([diagram])),
     [slots, diagram],
   );
-  const label = (id: number) => diagram.labels[id] ?? nodeValueLabel(heap[id] as ObjectSnap, heap);
+  const label = (id: number) => diagram.labels[id] ?? nodeValueLabel(heap[id] as ObjectSnap, heap, undefined, dialect);
   const nextOf = (id: number) => diagram.nextField[id] ?? 'next';
 
   const present = new Set(ids);
@@ -204,7 +207,7 @@ export function ListView({ diagram, heap, labels, current, written, created, hig
             const describe = [
               `node ${label(id)}`,
               tags.length ? `referenced by ${tags.map((t) => t.name).join(', ')}` : '',
-              isNull ? `${nextOf(id)} is null` : '',
+              isNull ? `${nextOf(id)} is ${noneWord(dialect)}` : '',
               rewired ? `${nextOf(id)} just changed` : '',
               isCurrent ? 'current' : '',
             ]
@@ -256,7 +259,11 @@ export function ListView({ diagram, heap, labels, current, written, created, hig
                     }`}
                     style={{ width: PTR_W }}
                   >
-                    {isNull ? 'null' : <span aria-hidden className={`size-1.5 rounded-full ${rewired ? 'bg-amber-300' : 'bg-navy-300'}`} />}
+                    {isNull ? (
+                      noneWord(dialect)
+                    ) : (
+                      <span aria-hidden className={`size-1.5 rounded-full ${rewired ? 'bg-amber-300' : 'bg-navy-300'}`} />
+                    )}
                   </span>
                 </button>
               </motion.div>

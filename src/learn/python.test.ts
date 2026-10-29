@@ -4,7 +4,7 @@
 import { loadPyodide, type PyodideAPI } from 'pyodide';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { installTracer, runPython } from '../engine/python/runPython';
-import { problemById } from '../problems/catalog';
+import { problemById, type ProblemDef } from '../problems/catalog';
 import { deepEqual } from '../problems/compare';
 import { notesIn, pythonStarter, starterIn } from '../problems/starters';
 import { resolveBindings } from '../viz/bindings';
@@ -54,8 +54,10 @@ describe('Python lesson demos', () => {
     expect(notesIn(p, 'python').tryThis).not.toEqual(l.tryThis);
     expect(notesIn(p, 'javascript')).toEqual({ description: l.idea, explanation: l.demoExplanation, tryThis: l.tryThis });
     expect(lessonNotes(l, 'javascript')).toEqual({ idea: l.idea, demoExplanation: l.demoExplanation, watch: l.watch, tryThis: l.tryThis });
-    // A generated stub has no notes to show; the description is the problem's own.
-    const plain = problemById('tree-build')!;
+    // A generated stub has no notes to show; the description is the problem's own. Every built-in
+    // example now has a Python version, so this uses one without it (as exercises and pasted problems are).
+    const plain: ProblemDef = { ...problemById('tree-build')!, python: undefined };
+    expect(starterIn(plain, 'python')).toBe(pythonStarter(plain));
     expect(notesIn(plain, 'python')).toEqual({ description: plain.description, explanation: '', tryThis: [] });
   });
 

@@ -2,6 +2,7 @@
 // nothing here guesses values: each function reorganizes recorded heap snapshots and
 // step effects. Which variables get these drawings is decided in bindings.ts.
 import type { Effect, FrameSnap, Heap, HeapSnap, StaticHints, Step, ValueSnap } from '../trace/types';
+import { boolWord, type Dialect } from './dialect';
 
 export type ArraySnap = Extract<HeapSnap, { kind: 'array' }>;
 type ObjSnap = Extract<HeapSnap, { kind: 'object' }>;
@@ -293,7 +294,13 @@ function finish(form: GraphForm, nodeKeys: string[], directedEdges: { from: stri
  * binding chose; `vertexCount` (a variable such as n) adds vertices no edge mentions.
  * Returns null when the data does not have that shape.
  */
-export function readGraph(h: HeapSnap, heap: Heap, as: 'adjacency' | 'edge-list', vertexCount?: number): GraphModel | null {
+export function readGraph(
+  h: HeapSnap,
+  heap: Heap,
+  as: 'adjacency' | 'edge-list',
+  vertexCount?: number,
+  dialect: Dialect = 'javascript',
+): GraphModel | null {
   const rowOf = new Map<number, string>();
   const pairOf = new Map<number, number>();
   const edges: { from: string; to: string; weight?: string }[] = [];
@@ -366,7 +373,12 @@ export function readGraph(h: HeapSnap, heap: Heap, as: 'adjacency' | 'edge-list'
         });
       });
       return {
-        ...finish('matrix', keys, edges, 'Adjacency matrix: a 1 (or true) in row u, column v is an edge from u to v.'),
+        ...finish(
+          'matrix',
+          keys,
+          edges,
+          `Adjacency matrix: a 1 (or ${boolWord(true, dialect)}) in row u, column v is an edge from u to v.`,
+        ),
         rowOf,
         pairOf,
       };
@@ -392,7 +404,7 @@ export function readGraph(h: HeapSnap, heap: Heap, as: 'adjacency' | 'edge-list'
     }
     for (const [k, row] of entries) if (!readRow(nodeKey(k)!, row)) return null;
     for (const e of edges) addKey(e.to);
-    const what = h.kind === 'map' ? 'Map' : 'object';
+    const what = h.kind === 'map' ? (dialect === 'python' ? 'dict' : 'Map') : 'object';
     return {
       ...finish(h.kind === 'map' ? 'map' : 'object', keys, edges, `Adjacency ${what}: each key lists the neighbors of that vertex.`),
       rowOf,

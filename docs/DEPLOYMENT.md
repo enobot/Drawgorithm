@@ -29,6 +29,9 @@ machine, a single Nginx serving `dist/` with the headers below is enough.
 - Build command: `npm ci && npm run build`. Publish directory: `dist`.
 - Environment variables (build time, public values only): `VITE_SUPABASE_URL` and
   `VITE_SUPABASE_PUBLISHABLE_KEY` (or `VITE_SUPABASE_ANON_KEY`). Never a secret key.
+  **At launch, set them:** sign-in is on so accounts can be counted (decided 2026-10-28, see
+  [LAUNCH-READINESS.md](LAUNCH-READINESS.md#open-decisions)). Without them the app shows no
+  sign-in to visitors.
 - The app has one page; demo links use a query string (`/?example=two-sum`), so no rewrite rules are needed.
 
 ### Response headers (`public/_headers`)
@@ -59,6 +62,45 @@ For Nginx, add them with `add_header ... always;` in the `server` block and serv
   Enabling it rejects passwords known from breaches. See
   https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
 - A privacy policy and terms of use; consider Supabase's CAPTCHA for sign-up.
+
+### A private first deployment on Vercel
+
+Checked against Vercel's docs on 2026-10-28. Everything here is done in your Vercel account;
+nothing in this repository changes.
+
+- **The default leaves the main address public.** A new project starts with Standard
+  Protection ([changelog, 2026-01-13](https://vercel.com/changelog/set-team-wide-defaults-for-deployment-protection)),
+  which protects every deployment except production domains
+  ([Deployment Protection](https://vercel.com/docs/deployment-protection#standard-protection)).
+  Clicking **Deploy** when importing the repository builds `main`, the default production
+  branch, and every later push to `main` is a production deployment
+  ([Git deployments](https://vercel.com/docs/git#production-branch)). So the project's
+  `.vercel.app` address would be public, and Vercel warns that unprotected deployments without a
+  custom domain can be indexed by search engines
+  ([guide](https://vercel.com/kb/guide/locking-down-deployments)).
+- **To keep every address private:** project **Settings → Deployment Protection**, turn on
+  **Vercel Authentication** with the scope **All Deployments**. Both are included on every plan,
+  Hobby too, with no extra charge
+  ([usage and pricing](https://vercel.com/docs/deployment-protection/usage-and-pricing)).
+  Visitors are sent to a Vercel login, and only you and people you let in can view the site
+  ([Vercel Authentication](https://vercel.com/docs/deployment-protection/methods-to-protect-deployments/vercel-authentication)).
+- **Private from the very first build:** Vercel lets you set a default protection for new
+  projects (All Deployments, Standard Protection or None) in team settings
+  ([Deployment Protection](https://vercel.com/docs/deployment-protection#how-team-default-settings-apply-to-new-projects)).
+  Set it to All Deployments before importing. The docs don't say whether a Hobby account has this
+  setting; if yours doesn't, switch the new project to All Deployments as soon as it exists, and
+  until you do, its first production build is public.
+- **Opening it on your phone:** sign in to Vercel in the phone's browser, or create a Shareable
+  Link from the deployment's **Share** button (**Anyone with the link**). Hobby allows one
+  Shareable Link per account in total, and one outside person granted access per account
+  ([Shareable Links](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/sharable-links)).
+  Revoke a link by switching back to **Only people with access**.
+- **Not needed:** Password Protection is not available on Hobby and costs $20 per month per
+  project on Pro; Vercel Authentication already covers a private preview.
+- **Going public later:** switch the scope to Standard Protection, which opens the production
+  domains and keeps preview builds private. Turning Vercel Authentication off entirely makes
+  every existing deployment public at once. A site that takes payments can't stay on Hobby (see
+  [LAUNCH-READINESS.md](LAUNCH-READINESS.md), "Hosting terms").
 
 ### Rollback
 

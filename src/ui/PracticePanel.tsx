@@ -4,7 +4,7 @@ import { lessonProblemId } from '../learn/problems';
 import { checkExercise, type CaseResult } from '../practice/check';
 import { findExercise } from '../practice/collections';
 import { LESSONS } from '../practice/foundations';
-import { answerIn } from '../practice/python';
+import { answerIn, hintsIn } from '../practice/python';
 import type { Exercise } from '../practice/schema';
 import { currentWork, useStore, workLanguage } from '../state/store';
 import { cancelCheck, checkInWorker } from '../worker/client';
@@ -187,6 +187,7 @@ function Reference({ exercise }: { exercise: Exercise }) {
 export function PracticePanel({ exerciseId }: { exerciseId: string }) {
   const exercise = findExercise(exerciseId);
   const selectProblem = useStore((s) => s.selectProblem);
+  const language = useStore((s) => workLanguage(currentWork(s)));
   if (!exercise?.content) return null;
   const c = exercise.content;
   const related = exercise.related.map((id) => findExercise(id)!).filter(Boolean);
@@ -204,7 +205,7 @@ export function PracticePanel({ exerciseId }: { exerciseId: string }) {
         <List title="Constraints" items={c.constraints} />
         <List title="Rules" items={c.rules} />
       </section>
-      <Hints hints={c.hints} />
+      <Hints hints={hintsIn(exercise, language)} />
       <CheckTests exercise={exercise} />
       <WalkthroughButton exercise={exercise} />
       <Reference exercise={exercise} />

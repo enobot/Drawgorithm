@@ -2,6 +2,8 @@ import { motion } from 'motion/react';
 import type { Heap, HeapSnap, ValueSnap } from '../../trace/types';
 import { formatSnap, nodeValueLabel, type Marker, type ObjectSnap } from '../analysis';
 import type { ShapeOf } from '../bindings';
+import type { Dialect } from '../dialect';
+import { useDialect } from '../dialectContext';
 import { useGlide } from '../theme';
 import {
   CARD,
@@ -46,13 +48,13 @@ interface ShelfSceneProps {
   shapeOf: ShapeOf;
 }
 
-function itemText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf): string {
+function itemText(v: ValueSnap, heap: Heap, shapeOf: ShapeOf, dialect: Dialect): string {
   if (v.t === 'ref') {
     const h = heap[v.id];
     const shape = shapeOf(h);
-    if (h && shape) return `node ${nodeValueLabel(h as ObjectSnap, heap, shape)}`;
+    if (h && shape) return `node ${nodeValueLabel(h as ObjectSnap, heap, shape, dialect)}`;
   }
-  return formatSnap(v, heap, 1);
+  return formatSnap(v, heap, 1, dialect);
 }
 
 /**
@@ -77,6 +79,7 @@ export function ShelfScene({
 }: ShelfSceneProps) {
   const sketch = useSvgId();
   const glide = useGlide();
+  const dialect = useDialect();
   const n = arr.items.length;
   // Room for a marker that points one past either end (e.g. right = -1 after the search ends).
   const lead = markers.some((m) => m.index === -1) ? 1 : 0;
@@ -109,7 +112,7 @@ export function ShelfScene({
       }
       overlay={
         overlay
-          ? `${name} = [${arr.items.map((v) => itemText(v, heap, shapeOf)).join(', ')}${arr.total > n ? ', …' : ''}]   ${markers.map((m) => `${m.name} = ${m.index}`).join('   ')}`
+          ? `${name} = [${arr.items.map((v) => itemText(v, heap, shapeOf, dialect)).join(', ')}${arr.total > n ? ', …' : ''}]   ${markers.map((m) => `${m.name} = ${m.index}`).join('   ')}`
           : undefined
       }
     >
@@ -153,7 +156,7 @@ export function ShelfScene({
       )}
       {arr.items.map((v, i) => {
         const x = xOf(i);
-        const text = itemText(v, heap, shapeOf);
+        const text = itemText(v, heap, shapeOf, dialect);
         const tone: Tone = writes.has(i)
           ? 'changed'
           : result?.has(i)

@@ -16,6 +16,8 @@ import {
 } from './analysis';
 import { ArrayView, Cells, isGrid, type ArrayRole, type DequeExtras } from './ArrayView';
 import { BitRows } from './BitsView';
+import type { Dialect } from './dialect';
+import { useDialect } from './dialectContext';
 import { numbersOf } from './illustrated/gumdrop';
 import { GumdropScene } from './illustrated/GumdropScene';
 import { lastRead, trackArrayItems } from './illustrated/identity';
@@ -490,10 +492,10 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
   );
 }
 
-function frameSummary(frame: FrameSnap, heap: Heap): string {
+function frameSummary(frame: FrameSnap, heap: Heap, dialect: Dialect): string {
   return frame.vars
     .slice(0, 5)
-    .map((v) => `${v.name} = ${formatSnap(v.value, heap)}`)
+    .map((v) => `${v.name} = ${formatSnap(v.value, heap, 0, dialect)}`)
     .join(', ');
 }
 
@@ -513,8 +515,9 @@ export function Structures({ ctx }: { ctx: BoardContext }) {
   const { step, focus } = ctx;
   const { order, referenced } = useMemo(() => variableRefs(step.frames), [step]);
   const shapeOf = ctx.shapeOf ?? conventionShape;
-  const tree = useMemo(() => buildTreeDiagram(step.heap, order, referenced, shapeOf), [step, order, referenced, shapeOf]);
-  const list = useMemo(() => buildListDiagram(step.heap, order, referenced, shapeOf), [step, order, referenced, shapeOf]);
+  const dialect = useDialect();
+  const tree = useMemo(() => buildTreeDiagram(step.heap, order, referenced, shapeOf, dialect), [step, order, referenced, shapeOf, dialect]);
+  const list = useMemo(() => buildListDiagram(step.heap, order, referenced, shapeOf, dialect), [step, order, referenced, shapeOf, dialect]);
   const labels = useMemo(() => nodeLabels(step.frames, step.heap, shapeOf), [step, shapeOf]);
   const activeFrame = step.frames[step.frames.length - 1];
   const queued = activeFrame ? queuedNodes(activeFrame, step.heap, ctx.hints, shapeOf) : new Set<number>();
@@ -590,6 +593,7 @@ const STACK_TAIL = 4;
 /** The call stack: the active call is open, the calls waiting on it are summarized. */
 export function CallStack({ ctx }: { ctx: BoardContext }) {
   const { step } = ctx;
+  const dialect = useDialect();
   const all = step.frames.filter((f, i) => !(i === 0 && f.vars.length === 0 && step.frames.length > 1));
   const active = step.frames[step.frames.length - 1];
   const showStack = step.frames.length > 1;
@@ -643,7 +647,7 @@ export function CallStack({ ctx }: { ctx: BoardContext }) {
                 {isActive && f.finished && <span className="text-[12px] text-navy-300">finished</span>}
                 {f.returning && (
                   <span
-                    title={`returns ${formatSnap(f.returning, step.heap)}`}
+                    title={`returns ${formatSnap(f.returning, step.heap, 0, dialect)}`}
                     className="max-w-[min(100%,22rem)] truncate rounded-full bg-violet-400/15 px-2.5 py-0.5 text-[12px] font-semibold text-violet-100 shadow-[inset_0_0_0_1px_rgb(196_181_253/0.55)]"
                   >
                     returns <ValueText v={f.returning} heap={step.heap} />
@@ -655,7 +659,9 @@ export function CallStack({ ctx }: { ctx: BoardContext }) {
                   <FrameContent frame={f} ctx={ctx} active />
                 </div>
               ) : (
-                f.vars.length > 0 && <p className="mt-0.5 truncate font-mono text-[12px] text-navy-400">{frameSummary(f, step.heap)}</p>
+                f.vars.length > 0 && (
+                  <p className="mt-0.5 truncate font-mono text-[12px] text-navy-400">{frameSummary(f, step.heap, dialect)}</p>
+                )
               )}
             </motion.div>,
           ];

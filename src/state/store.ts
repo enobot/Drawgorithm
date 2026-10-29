@@ -54,12 +54,14 @@ export interface RunState {
   status: 'idle' | 'running' | 'done' | 'stopped' | 'failed';
   result: RunResult | null;
   codeAtRun: string;
+  /** The language of codeAtRun, so the drawing uses its words (None or null) even after the editor switches. */
+  language: LanguageId;
   problemId: string;
   expect: ExpectSpec;
   /** Why the run stopped without a trace (time limit, Stop button, crash) or why it could not start. */
   message: string | null;
   /** The last run that finished successfully; it stays visible (labeled) after a failed run. */
-  lastGood: { result: RunResult; codeAtRun: string; problemId: string; expect: ExpectSpec } | null;
+  lastGood: { result: RunResult; codeAtRun: string; language: LanguageId; problemId: string; expect: ExpectSpec } | null;
   /** The user chose to step through the partial trace of a failed run. */
   inspectFailed: boolean;
   /** Started automatically after a typing pause rather than by the Run button. */
@@ -69,6 +71,7 @@ export interface RunState {
 export interface DisplayedRun {
   result: RunResult;
   codeAtRun: string;
+  language: LanguageId;
   expect: ExpectSpec;
   /** current: the latest run finished. failed-steps: the partial trace of a failed run, opened on request. previous: the last successful run, shown because the latest one failed. */
   kind: 'current' | 'failed-steps' | 'previous';
@@ -82,12 +85,13 @@ export function runFailed(run: RunState): boolean {
 export function displayedRun(s: Pick<State, 'run' | 'problemId'>): DisplayedRun | null {
   const r = s.run;
   if (r.problemId !== s.problemId) return null;
-  if (!runFailed(r)) return r.result ? { result: r.result, codeAtRun: r.codeAtRun, expect: r.expect, kind: 'current' } : null;
+  if (!runFailed(r))
+    return r.result ? { result: r.result, codeAtRun: r.codeAtRun, language: r.language, expect: r.expect, kind: 'current' } : null;
   if (r.inspectFailed && r.result && r.result.status === 'error' && r.result.steps.length > 0) {
-    return { result: r.result, codeAtRun: r.codeAtRun, expect: r.expect, kind: 'failed-steps' };
+    return { result: r.result, codeAtRun: r.codeAtRun, language: r.language, expect: r.expect, kind: 'failed-steps' };
   }
   const good = r.lastGood && r.lastGood.problemId === s.problemId ? r.lastGood : null;
-  return good ? { result: good.result, codeAtRun: good.codeAtRun, expect: good.expect, kind: 'previous' } : null;
+  return good ? { result: good.result, codeAtRun: good.codeAtRun, language: good.language, expect: good.expect, kind: 'previous' } : null;
 }
 
 interface State {
@@ -275,6 +279,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
     status: 'idle',
     result: null,
     codeAtRun: '',
+    language: 'javascript',
     problemId: '',
     expect: { kind: 'none' },
     message: null,
@@ -407,6 +412,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
     const p = problemFor(s.problemId, s.custom);
     const w = currentWork(s);
     const code = shownCode(s);
+    const language = shownLanguage(s);
     const walking = s.walkthrough?.problemId === s.problemId;
     const bad = w.inputs.find((r) => !parseValue(r.text).ok);
     if (p.mode === 'function' && bad) {
@@ -417,6 +423,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
           status: 'failed',
           result: null,
           codeAtRun: code,
+          language,
           problemId: p.id,
           inspectFailed: false,
           auto: !!opts.auto,
@@ -439,7 +446,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
     // While running, the previous trace stays paired with the code that produced it.
     set({ run: { ...s.run, status: 'running', message: null, inspectFailed: false, auto: !!opts.auto }, playing: false, ...show });
     try {
-      const result = await runInWorker(request, shownLanguage(s));
+      const result = await runInWorker(request, language);
       if (token !== latestRun) return;
       const ok = result.status === 'finished';
       set({
@@ -447,11 +454,12 @@ export const useStore = create<State & Actions>()((set, get) => ({
           status: 'done',
           result,
           codeAtRun: code,
+          language,
           problemId: p.id,
           expect,
           message: null,
           // Only a run of the learner's own code that finished becomes the drawing to fall back on (never a walkthrough).
-          lastGood: ok && !walking ? { result, codeAtRun: code, problemId: p.id, expect } : lastGood,
+          lastGood: ok && !walking ? { result, codeAtRun: code, language, problemId: p.id, expect } : lastGood,
           inspectFailed: false,
           auto: !!opts.auto,
         },
@@ -466,7 +474,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
       const message = e instanceof EngineStopped ? e.message : `The engine failed: ${String(e)}`;
       const status = e instanceof EngineStopped && e.reason === 'stopped' ? 'stopped' : 'failed';
       set({
-        run: { ...get().run, status, message, result: null, codeAtRun: code, problemId: p.id, inspectFailed: false },
+        run: { ...get().run, status, message, result: null, codeAtRun: code, language, problemId: p.id, inspectFailed: false },
         step: 0,
         playing: false,
       });

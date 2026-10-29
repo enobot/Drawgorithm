@@ -2,9 +2,14 @@
 // limits come back in the shared trace format, and the board's drawing rules read them.
 import { loadPyodide, type PyodideAPI } from 'pyodide';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { PROBLEMS, type ProblemDef } from '../../problems/catalog';
+import { compareRun } from '../../problems/compare';
+import { notesIn, starterIn } from '../../problems/starters';
 import type { InputSpec, RunResult } from '../../trace/types';
+import { buildListDiagram, formatSnap, variableRefs } from '../../viz/analysis';
 import { resolveBindings } from '../../viz/bindings';
 import { readCallTree } from '../../viz/structures';
+import { runProgram } from '../run';
 import { installTracer, livePython, runPython } from './runPython';
 
 let py: PyodideAPI;
@@ -194,5 +199,100 @@ describe('Python code gets the same drawings', () => {
     const x = run('def lone(ids):\n    acc = 0\n    for i in ids:\n        acc ^= i\n    return acc\n', 'lone', auto({ ids: [4, 1, 4] }));
     expect(x.plainResult).toBe(1);
     expect([...x.hints.usage!.bits].sort()).toEqual(['acc', 'i']);
+  });
+});
+
+describe('Python values on the board', () => {
+  it('writes values the way Python prints them, and JavaScript runs as before', () => {
+    const code = [
+      'import math',
+      'nothing = None',
+      'flag = True',
+      'best = math.inf',
+      'word = "it\'s"',
+      "counts = {'a': 1, 2: [3, None]}",
+      'empty = set()',
+      'seen = {3, 1}',
+      'head = ListNode(1, ListNode(2))',
+      'head.next.next = head',
+      '',
+    ].join('\n');
+    const r = runPython(py, { code, mode: 'script', inputs: [] });
+    expect(r.status, r.error?.message).toBe('finished');
+    const last = r.steps[r.steps.length - 1];
+    const text = (name: string, dialect?: 'python') => {
+      const v = last.frames[0].vars.find((x) => x.name === name)!;
+      return formatSnap(v.value, last.heap, 0, dialect);
+    };
+    expect(text('nothing', 'python')).toBe('None');
+    expect(text('flag', 'python')).toBe('True');
+    expect(text('best', 'python')).toBe('inf');
+    expect(text('word', 'python')).toBe('"it\'s"');
+    expect(text('counts', 'python')).toBe("{'a': 1, 2: [3, None]}");
+    expect(text('empty', 'python')).toBe('set()');
+    expect(text('seen', 'python')).toBe('{1, 3}');
+    // Without a dialect the words are JavaScript's, exactly as before.
+    expect([text('nothing'), text('flag'), text('best'), text('counts'), text('empty')]).toEqual([
+      'null',
+      'true',
+      'Infinity',
+      'Map(2)',
+      'Set(0)',
+    ]);
+
+    const { order, referenced } = variableRefs(last.frames);
+    const cycle = (dialect?: 'python') =>
+      buildListDiagram(last.heap, order, referenced, undefined, dialect).issues.find((i) => i.kind === 'cycle')?.text;
+    expect(cycle('python')).toMatch(/would never reach None\.$/);
+    expect(cycle()).toMatch(/would never reach null\.$/);
+  });
+
+  it('says why an array is a queue or a deque with the methods Python code calls', () => {
+    const code =
+      'from collections import deque\ndef order(items):\n    q = deque(items)\n    out = []\n    while q:\n        out.append(q.popleft())\n    return out\n';
+    const r = run(code, 'order', auto({ items: [1, 2] }));
+    const step = r.steps.find((s) => s.frames.some((f) => f.vars.some((v) => v.name === 'q')))!;
+    const reason = (dialect?: 'python') =>
+      resolveBindings(step.heap, step.frames, r.hints, undefined, dialect).arrays.find((a) => a.name === 'q')?.roleReason;
+    expect(reason('python')).toBe('the code calls q.popleft() or q.pop(0)');
+    expect(reason()).toBe('the code calls q.shift()');
+  });
+});
+
+describe('Built-in examples in Python', () => {
+  const inputsFor = (p: ProblemDef, c: ProblemDef['cases'][number]): InputSpec[] =>
+    p.params.map((x) => ({ name: x.name, value: c.inputs[x.name], kind: x.kind }));
+  /** Every drawing role and node shape the run's states get, as the board reads them. */
+  const drawings = (r: RunResult) =>
+    [
+      ...new Set(
+        r.steps.flatMap((s) => {
+          const b = resolveBindings(s.heap, s.frames, r.hints);
+          return [...[...b.roles.values()].map((x) => x.role), ...b.shapes.map((x) => x.shape.kind).filter((k) => k !== 'object')];
+        }),
+      ),
+    ].sort();
+
+  it.each(PROBLEMS.map((p) => [p.id, p] as const))('%s opens in Python, matches every case and is drawn as in JavaScript', (_id, p) => {
+    expect(p.python?.starter).toBeTruthy();
+    expect(starterIn(p, 'python')).toBe(p.python!.starter);
+    for (const c of p.cases) {
+      const request = { mode: p.mode, entry: p.entry, resultKind: p.resultKind, inputs: inputsFor(p, c) };
+      const r = runPython(py, { code: p.python!.starter, ...request });
+      expect(r.status, `${c.label}: ${r.error?.message}`).toBe('finished');
+      expect(compareRun(c.expected, r)?.match, c.label).toBe(true);
+      expect(drawings(r), c.label).toEqual(drawings(runProgram({ code: p.starter, ...request })));
+    }
+  });
+
+  it('words the notes on each example for Python', () => {
+    const JAVASCRIPT = /\bnull\b|\bundefined\b|\b(const|let)\b|\bnew [A-Z]\w*\(|===|\.(push|shift|set|has)\(|Math\./;
+    for (const p of PROBLEMS) {
+      const notes = notesIn(p, 'python');
+      expect(
+        [notes.explanation, ...notes.tryThis].filter((t) => JAVASCRIPT.test(t)),
+        p.id,
+      ).toEqual([]);
+    }
   });
 });

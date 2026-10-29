@@ -12,11 +12,11 @@ Checked 2026-10-28 on branch `feature/foundations-lessons-python`. This is an en
 | Security headers                                 | Same CSP and headers for Netlify/Cloudflare (`public/_headers`) and Vercel (`vercel.json`), test-enforced |
 | Cookies, tracking, analytics, third-party embeds | None (see [what the site stores](#what-the-site-collects-and-stores))                                     |
 | Images and fonts                                 | No image files; fonts are self-hosted under the SIL Open Font License                                     |
-| Third-party licence notices                      | `public/third-party-notices.txt`, generated and checked in CI; CPython and Pyodide full texts pending     |
+| Third-party licence notices                      | `public/third-party-notices.txt`, generated and checked in CI, with the full CPython and Pyodide licences |
 | Reviews, testimonials, claims                    | None on the site; one unsupported claim reworded; non-affiliation statement added                         |
 | Privacy policy, terms                            | **Not written yet**: needs the operator's name and contact email (see [open decisions](#open-decisions))  |
 | Payments, refund policy                          | No payments exist, so no refund policy is needed yet; requirements for Stripe listed below                |
-| Automated checks on every push                   | `.github/workflows/checks.yml` (not yet run on GitHub)                                                    |
+| Automated checks on every push                   | `.github/workflows/checks.yml`, passed on GitHub for `5654860`                                            |
 
 ## What the site collects and stores
 
@@ -35,7 +35,7 @@ From the code (`src/state/store.ts`, `src/ui/App.tsx`, `src/auth/`) and the Supa
 - **No third-party embeds or scripts**: fonts are bundled (`@fontsource`), the editor and Python run from this site.
 - Learners' code runs in the browser and is never sent anywhere. Accounts do not save code or progress yet (`docs/ACCOUNTS.md`).
 
-The goal is to collect only what is needed. Accounts currently collect an email address that is used only to sign in, because accounts do not save anything yet ([open decision 2](#open-decisions)).
+The goal is to collect only what is needed. **Sign-in is on at launch** so the number of accounts can be counted (decided 2026-10-28, later the same day, replacing an earlier “off at launch”; [decision 2](#open-decisions)). The live build therefore needs the Supabase settings (without them the app shows no sign-in, `src/auth/AuthUI.tsx`), and the email, password and sign-in-log rows above apply from launch. [PRIVACY-AND-TERMS-PLAN.md](PRIVACY-AND-TERMS-PLAN.md) plans the privacy policy and terms around them.
 
 ## Accessibility
 
@@ -70,7 +70,7 @@ The goal is to collect only what is needed. Accounts currently collect an email 
 - In the technical linked-list drawing, a node ending in “null” is named “node 4, next is null”; axe wants “4 null” together. “null” is the node's pointer value, not its label, and the W3C page limits 2.5.3 to text that labels a control.
 - On phones the floating zoom controls can sit over the bottom edge of a drawing; the board scrolls it clear.
 
-**Not covered:** screen readers (NVDA, VoiceOver, TalkBack) were not tried by hand; only Chromium was tested (Firefox and WebKit are not installed); no real phones; contrast was checked at one step of each drawing, not every step; the editor's own widgets come from Monaco.
+**Not covered:** screen readers (NVDA, VoiceOver, TalkBack) were not tried by hand; only Chromium was tested (Firefox and WebKit were installed later that day for the cross-browser check under [Verification run](#verification-run); the accessibility checks were not re-run in them); no real phones; contrast was checked at one step of each drawing, not every step; the editor's own widgets come from Monaco.
 
 **Why it matters legally:** the Justice Department states that the ADA applies to the websites of businesses open to the public and points to WCAG as guidance, without a required standard ([ADA.gov, 2022-03-18](https://www.ada.gov/resources/web-guidance/)). In California a violation of the ADA is also a violation of the Unruh Civil Rights Act ([Civil Code § 51(f)](https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=51)), with damages of “no case less than four thousand dollars ($4,000)” per offense ([§ 52(a)](https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=CIV&sectionNum=52)).
 
@@ -88,7 +88,7 @@ The goal is to collect only what is needed. Accounts currently collect an email 
 - **Content:** every exercise, lesson and example is written for this project (`docs/INTERVIEW-100.md` describes the method). The Interview 100 list, the README and the sources document now say Drawgorithms is not affiliated with or endorsed by LeetCode, NeetCode or the Tech Interview Handbook.
 - **Images:** none. The drawings are generated SVG and the favicon is inline SVG written for the app.
 - **Shipped code and fonts:** 26 MIT packages, 3 fonts under OFL-1.1, DOMPurify (MPL-2.0 or Apache-2.0), tslib (0BSD), Pyodide (MPL-2.0) and CPython inside it (PSF licence). MIT and OFL require their notices to travel with copies; the MPL requires telling recipients how to get the source ([MPL 2.0 §3.1–3.2](https://www.mozilla.org/en-US/MPL/2.0/)); the PSF licence requires keeping its agreement and copyright notice ([Python licence, clause 2](https://docs.python.org/3/license.html)).
-- `npm run notices` writes `public/third-party-notices.txt` from each package's own licence file; CI fails if it is out of date. **Pending:** the npm package of Pyodide includes no licence file, so the notices link to the Pyodide source and the MPL, and to CPython's licence page; the full CPython and Pyodide licence texts should be added (needs your OK to download them).
+- `npm run notices` writes `public/third-party-notices.txt` from each package's own licence file; CI fails if it is out of date. The npm package of Pyodide includes no licence file, so the full `LICENSE` files of Pyodide 314.0.7 and CPython 3.14.2 (downloaded from their official repositories on 2026-10-28, with your OK) are kept in `scripts/licences/` and included in the notices, after the links to the Pyodide source and CPython's licence page. The script stops if Pyodide is upgraded without the matching files.
 - The notices file is not linked from the app yet; it belongs next to the Privacy and Terms links.
 
 ## California and federal law
@@ -138,13 +138,15 @@ On 2026-10-28, after all changes:
 
 - `npm run check` (types, lint, 1,574 tests), `npm run format:check`, `npm run build`, `npm audit`: all pass, 0 vulnerabilities.
 - In the production build (Chromium): Check all tests and the Python walkthrough on Interview 100 exercises; the Python lesson flows; the editor's hover tooltips; every Interview 100 exercise ran to the expected output in both languages at both sizes (earlier today).
-- GitHub Actions has not run yet (the workflow is new and nothing is pushed).
+- GitHub Actions first ran on 2026-10-28 for `5654860` (pushed to `main`, which by then also had the interview guides and 1,651 tests): every step passed ([run 40801932810](https://github.com/enobot/Drawgorithm/actions/runs/40801932810)): `npm ci`, `npm run check`, `npm run format:check`, `npm run build`, the licence-notices check and `npm audit --audit-level=high`.
+
+- Cross-browser, on 2026-10-28, with the production build served with the `_headers` CSP: Edge (Chromium), Firefox 157 and WebKit 27.2 (Playwright's build for Windows, close to Safari but not identical) each ran all 7 built-in examples in Python to the expected output, stepping through every step. Python's runtime loaded under the CSP in all three, and no request left the site. Console: Firefox warns that Pyodide's WebAssembly uses the deprecated `try` instruction; WebKit ignores the `interactive-widget` viewport setting. **Seen in WebKit only:** the select menus (Language, Load example, input kind, Speed) draw white with nearly invisible text, and bold text renders thin. Check both in real Safari (Mac and iPhone) before fixing anything.
 
 ## Open decisions
 
 1. **Operator details for the privacy policy and terms:** the name to show and a contact email for privacy requests.
-2. **Sign-in at launch:** you chose to keep Supabase. Accounts do not save anything yet, so turning sign-in on collects emails before they serve a purpose. Keeping it off until accounts save progress collects no personal data at all.
-3. **Downloads, with your OK:** CPython's and Pyodide's licence files (for the notices), and Playwright's Firefox and WebKit browsers (for cross-browser tests).
+2. **Sign-in at launch: decided 2026-10-28, on, to count users** (replacing an earlier “off until accounts save progress” from the same day). Set `VITE_SUPABASE_URL` and the Supabase publishable key in the live build's environment variables; without them the app shows no sign-in. The privacy policy and terms must cover the email addresses this collects ([PRIVACY-AND-TERMS-PLAN.md](PRIVACY-AND-TERMS-PLAN.md)).
+3. **Downloads: done 2026-10-28, with your OK.** CPython's and Pyodide's licence files are in the notices; Playwright's Firefox 157.0 and WebKit 27.2 are installed in `G:\ms-playwright`, outside the repository.
 4. **Supabase dashboard:** leaked-password protection, URLs, SMTP, CAPTCHA.
 5. **Node.js:** this machine runs Node 25, which reached end of life on 2026-03-31 ([nodejs.org](https://nodejs.org/en/about/previous-releases)), and Vitest 5 lists `^22.12.0 || ^24.0.0 || >=26.0.0`. CI uses Node 24 (LTS); using 24 locally too, and choosing 24.x in Vercel's project settings, keeps them the same.
 6. **Attorney review** of the privacy policy and terms once drafted.
