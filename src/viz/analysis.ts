@@ -46,11 +46,14 @@ export function formatSnap(v: ValueSnap | undefined, heap: Heap, depth = 0, dial
   if (!h) return '…';
   const inner = (x: ValueSnap) => formatSnap(x, heap, depth + 1, dialect);
   if (isTreeObj(h) || isListObj(h)) return `node ${formatSnap(field(h, 'val'), heap, 2, dialect)}`;
-  if (depth > 1) return h.kind === 'array' ? `[…${h.total}]` : '{…}';
+  const tuple = dialect === 'python' && h.kind === 'array' && !!h.tuple;
+  if (depth > 1) return h.kind === 'array' ? (tuple ? `(…${h.total})` : `[…${h.total}]`) : '{…}';
   switch (h.kind) {
     case 'array': {
       const items = h.items.slice(0, 8).map(inner);
       if (h.total > 8) items.push(`…+${h.total - 8}`);
+      // A Python tuple is written as Python prints it: (2, True), and (5,) when it holds one item.
+      if (tuple) return h.total === 1 ? `(${items[0]},)` : `(${items.join(', ')})`;
       return `[${items.join(', ')}]`;
     }
     case 'map':

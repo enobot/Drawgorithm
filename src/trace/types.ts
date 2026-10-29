@@ -22,7 +22,8 @@ export type ValueSnap =
   | { t: 'function'; name: string };
 
 export type HeapSnap =
-  | { kind: 'array'; id: number; items: ValueSnap[]; total: number }
+  /** `tuple` marks a Python tuple: drawn as an array, written with parentheses in Python's words. */
+  | { kind: 'array'; id: number; items: ValueSnap[]; total: number; tuple?: boolean }
   | { kind: 'map'; id: number; entries: [ValueSnap, ValueSnap][]; total: number }
   | { kind: 'set'; id: number; items: ValueSnap[]; total: number }
   | { kind: 'object'; id: number; className: string | null; entries: [string, ValueSnap][] };

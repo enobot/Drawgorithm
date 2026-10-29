@@ -12,6 +12,7 @@ import keyword
 import math
 import sys
 from collections import deque
+from types import ModuleType
 
 USER_FILE = '<your code>'
 MAX_ITEMS = 200
@@ -115,6 +116,11 @@ class Tracer:
             return True
         return hasattr(v, '__dict__') and not isinstance(v, type) and not callable(v)
 
+    def is_code(self, v):
+        """Functions, classes and modules are code, not data: as in JavaScript (frameVars in
+        engine/snapshot.ts), frames leave them out, so `import math` or a def adds no block."""
+        return isinstance(v, (type, ModuleType)) or callable(v)
+
     def snap(self, v, queue):
         self.values += 1
         if v is None:
@@ -147,6 +153,8 @@ class Tracer:
             if isinstance(obj, (list, tuple, deque)):
                 items = [self.snap(x, queue) for _, x in zip(range(MAX_ITEMS), obj)]
                 heap[i] = {'kind': 'array', 'id': i, 'items': items, 'total': len(obj)}
+                if isinstance(obj, tuple):
+                    heap[i]['tuple'] = True
             elif isinstance(obj, dict):
                 entries = [[self.snap(k, queue), self.snap(x, queue)] for _, (k, x) in zip(range(MAX_ITEMS), obj.items())]
                 heap[i] = {'kind': 'map', 'id': i, 'entries': entries, 'total': len(obj)}
@@ -175,12 +183,14 @@ class Tracer:
             return f'node {self.fmt(v.val, depth + 1)}'
         if isinstance(v, (list, tuple, deque)):
             if depth > 1:
-                return f'[…{len(v)}]'
+                return f'(…{len(v)})' if isinstance(v, tuple) else f'[…{len(v)}]'
             items = [self.fmt(x, depth + 1) for x in list(v)[:6]]
             if len(v) > 6:
                 items.append(f'…{len(v) - 6} more')
             inner = ', '.join(items)
-            return f'({inner})' if isinstance(v, tuple) else f'[{inner}]'
+            if isinstance(v, tuple):
+                return f'({inner},)' if len(v) == 1 else f'({inner})'
+            return f'[{inner}]'
         if isinstance(v, dict):
             if depth > 1:
                 return '{…}'
@@ -198,10 +208,9 @@ class Tracer:
         if fid == 0:
             out = []
             for name, value in self.module_ns.items():
-                if name.startswith('__') or (name in PROVIDED and value is PROVIDED[name]):
+                if name.startswith('__') or self.is_code(value):
                     continue
-                kind = 'class' if isinstance(value, type) else 'function' if callable(value) else 'let'
-                out.append({'name': name, 'value': self.snap(value, queue), 'declKind': kind})
+                out.append({'name': name, 'value': self.snap(value, queue), 'declKind': 'let'})
             return out
         code = frame.f_code
         local = dict(frame.f_locals)
@@ -211,7 +220,7 @@ class Tracer:
         free = set(code.co_freevars)
         out = []
         for name in order:
-            if name in free or name.startswith('.'):
+            if name in free or name.startswith('.') or self.is_code(local[name]):
                 continue
             out.append({'name': name, 'value': self.snap(local[name], queue), 'declKind': 'param' if name in params else 'let'})
         return out
@@ -322,7 +331,10 @@ class Tracer:
         inner = lambda x: self.show(x, heap) if x['t'] != 'ref' else '…'  # noqa: E731
         more = lambda shown: ', …' if h['total'] > shown else ''  # noqa: E731
         if h['kind'] == 'array':
-            return '[' + ', '.join(inner(x) for x in h['items'][:5]) + more(5) + ']'
+            items = ', '.join(inner(x) for x in h['items'][:5]) + more(5)
+            if h.get('tuple'):
+                return f'({items},)' if h['total'] == 1 else f'({items})'
+            return '[' + items + ']'
         if h['kind'] == 'map':
             return '{' + ', '.join(f'{inner(k)}: {inner(v)}' for k, v in h['entries'][:4]) + more(4) + '}'
         if h['kind'] == 'set':

@@ -247,6 +247,74 @@ describe('Python values on the board', () => {
     expect(cycle()).toMatch(/would never reach null\.$/);
   });
 
+  it('leaves functions, classes and imported modules out of the variables, as JavaScript does', () => {
+    const code = [
+      'import math',
+      'import heapq',
+      'from collections import deque, Counter',
+      'from math import inf as INF',
+      'def pairs(nums):',
+      '    def twice(x):',
+      '        return 2 * x',
+      '    best = twice(nums[0])',
+      '    return best',
+      '',
+    ].join('\n');
+    const r = run(code, 'pairs', auto({ nums: [5, 6] }));
+    expect(r.status, r.error?.message).toBe('finished');
+    expect(r.plainResult).toBe(10);
+    const last = r.steps[r.steps.length - 1];
+    // A value imported from a module is data and stays; the modules, classes and functions don't.
+    expect(last.frames[0].vars.map((v) => v.name)).toEqual(['INF']);
+    expect(last.frames.at(-1)!.vars.map((v) => v.name)).toEqual(['nums', 'best']);
+    for (const s of r.steps) {
+      expect(
+        Object.values(s.heap).filter((h) => h.kind === 'object' && h.className === 'module'),
+        `step ${s.index}`,
+      ).toEqual([]);
+      expect(s.explanation, `step ${s.index}`).not.toMatch(/module|function/);
+    }
+    // Only a function defined: the Program card is empty, so the board hides it as it does for JavaScript.
+    const two = run('def twoSum(nums, target):\n    return [0, 1]\n', 'twoSum', auto({ nums: [1, 2], target: 3 }));
+    expect(two.steps.filter((s) => s.frames[0].vars.length > 0)).toEqual([]);
+  });
+
+  it('writes tuples with parentheses, as Python prints them', () => {
+    const code = [
+      'def pick(nums):',
+      '    best = (nums[0], True)',
+      '    one = (nums[1],)',
+      '    empty = ()',
+      "    pq = [(3, 'b'), (1, 'a')]",
+      '    return one',
+      '',
+    ].join('\n');
+    const r = run(code, 'pick', auto({ nums: [2, 5] }));
+    expect(r.status, r.error?.message).toBe('finished');
+    const last = r.steps[r.steps.length - 1];
+    const vars = last.frames.at(-1)!.vars;
+    const value = (name: string) => vars.find((v) => v.name === name)!.value;
+    const text = (name: string, dialect?: 'python') => formatSnap(value(name), last.heap, 0, dialect);
+    expect(text('best', 'python')).toBe('(2, True)');
+    expect(text('one', 'python')).toBe('(5,)');
+    expect(text('empty', 'python')).toBe('()');
+    expect(text('pq', 'python')).toBe("[(3, 'b'), (1, 'a')]");
+    // The trace marks tuples, and lists stay plain arrays.
+    const pq = value('pq');
+    expect(pq.t === 'ref' && last.heap[pq.id]).not.toHaveProperty('tuple');
+    const best = value('best');
+    expect(best.t === 'ref' && last.heap[best.id]).toMatchObject({ kind: 'array', tuple: true });
+    // JavaScript's words are unchanged: there, a tuple reads as the array it is drawn as.
+    expect(text('best')).toBe('[2, true]');
+    expect(r.steps.map((s) => s.explanation)).toContain('Line 2: best = (2, True).');
+    expect(last.explanation).toBe('Finished. pick([2, 5]) returned (5,).');
+    // Deep inside, a tuple is shortened the way an array is, keeping its parentheses.
+    const deep = run('def f():\n    return [[(1, 2)]]\n', 'f', []);
+    const done = deep.steps[deep.steps.length - 1];
+    expect(done.explanation).toBe('Finished. f() returned [[(…2)]].');
+    expect(formatSnap(done.result, done.heap, 0, 'python')).toBe('[[(…2)]]');
+  });
+
   it('says why an array is a queue or a deque with the methods Python code calls', () => {
     const code =
       'from collections import deque\ndef order(items):\n    q = deque(items)\n    out = []\n    while q:\n        out.append(q.popleft())\n    return out\n';
