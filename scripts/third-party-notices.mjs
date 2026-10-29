@@ -18,7 +18,8 @@ for (const [key, entry] of Object.entries(lock.packages).sort(([a], [b]) => a.lo
   if (!key.startsWith('node_modules/') || entry.dev || !existsSync(key)) continue;
   const name = key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
   const files = readdirSync(key).filter((f) => /^(licen[cs]e|copying|notice)/i.test(f));
-  const texts = files.map((f) => readFileSync(join(key, f), 'utf8').trim());
+  // LF only: some packages ship Windows line endings, and the repository stores text as LF.
+  const texts = files.map((f) => readFileSync(join(key, f), 'utf8').replace(/\r\n?/g, '\n').trim());
   const pkg = JSON.parse(readFileSync(join(key, 'package.json'), 'utf8'));
   const source = typeof pkg.repository === 'string' ? pkg.repository : pkg.repository?.url;
   sections.push(
