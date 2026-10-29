@@ -38,6 +38,13 @@ export interface ProblemDef {
     resultIndicesInto?: string;
     /** Column labels for hash maps, e.g. value → index. */
     mapColumns?: [string, string];
+    /**
+     * The Illustrated style draws arrays of numbers as gumdrops and maps as a notebook
+     * (docs/DESIGN_SYSTEM.md). Problems opt in one at a time while the cast is reviewed.
+     */
+    scene?: 'gumdrops';
+    /** Variables shown as big stat cards above the Illustrated drawing, in this order. */
+    statCards?: string[];
   };
 }
 
@@ -162,7 +169,7 @@ const waiting = line.length;
       'Pick the Duplicates case: [3, 3] with target 6.',
       'Move seen.set(nums[i], i) above the if and run the Duplicates case to see the bug it causes.',
     ],
-    view: { resultIndicesInto: 'nums', mapColumns: ['value', 'index'] },
+    view: { resultIndicesInto: 'nums', mapColumns: ['value', 'index'], scene: 'gumdrops', statCards: ['target', 'complement'] },
   },
   {
     id: 'binary-search',

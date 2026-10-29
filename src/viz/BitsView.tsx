@@ -81,7 +81,7 @@ export function BitRows({ frame, step, steps, names, active }: BitRowsProps) {
         <span />
         <div className="flex gap-[3px]" aria-hidden>
           {places.map((k) => (
-            <span key={k} className={`w-[18px] text-center font-mono text-[9.5px] text-navy-500 ${gapBefore(k)}`}>
+            <span key={k} className={`w-[18px] text-center font-mono text-[9.5px] text-navy-400 ${gapBefore(k)}`}>
               {k}
             </span>
           ))}

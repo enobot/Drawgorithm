@@ -11,17 +11,26 @@ export const PAPER = '#eee9de';
 export const CARD = '#fbf8f1';
 export const HAND = 'var(--font-hand)';
 
-/** One small palette, shared with the technical view's states (darker, to read on paper). */
+/**
+ * One small palette, shared with the technical view's states (darker, to read on paper).
+ * Every tone but `muted` is dark enough for text: at least 4.5:1 on PAPER and CARD (WCAG 1.4.3).
+ */
 export const TONE = {
   idle: INK,
-  current: '#0c8577',
-  changed: '#b86e0c',
+  current: '#0a7266',
+  changed: '#94560a',
   compare: '#5a49c2',
-  problem: '#c23a61',
-  answer: '#1f8a4c',
+  problem: '#a8304f',
+  answer: '#18753f',
   muted: '#a29b8b',
 } as const;
 export type Tone = keyof typeof TONE;
+
+/** Faded text: `muted` is for faded lines only; text that must stay readable uses this (4.5:1 or more). */
+export const MUTED_TEXT = '#5b5547';
+
+/** A tone's color for text on paper. */
+export const textTone = (tone: Tone) => (tone === 'muted' ? MUTED_TEXT : TONE[tone]);
 
 /** A variable's color, darkened enough to read on paper. */
 export const inkOf = (name: string) => `color-mix(in oklab, ${varColor(name).hex} 58%, #1b2033)`;
@@ -287,7 +296,7 @@ export function Flags({ x, y, names, faint = [] }: { x: number; y: number; names
         return (
           <g key={n}>
             <rect x={left} y={y - 30} width={w} height={21} rx={10} fill={dim ? '#d9d3c5' : inkOf(n)} />
-            <text x={left + w / 2} y={y - 14.5} textAnchor="middle" fontSize={15} fontFamily={HAND} fill={dim ? '#6d6758' : '#fbf8f1'}>
+            <text x={left + w / 2} y={y - 14.5} textAnchor="middle" fontSize={15} fontFamily={HAND} fill={dim ? MUTED_TEXT : '#fbf8f1'}>
               {n}
             </text>
           </g>

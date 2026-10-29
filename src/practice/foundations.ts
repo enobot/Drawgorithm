@@ -65,7 +65,7 @@ export const LESSONS: Record<string, string> = {
 };
 
 /** Prerequisites for planned exercises, by topic (authored exercises list their own). */
-const TOPIC_LESSONS: Record<TopicId, string[]> = {
+export const TOPIC_LESSONS: Record<TopicId, string[]> = {
   'arrays-hashing': ['arrays-basics', 'hash-maps'],
   'two-pointers': ['arrays-basics', 'two-pointers'],
   'sliding-window': ['arrays-basics', 'sliding-window', 'prefix-sums'],

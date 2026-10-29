@@ -17,6 +17,7 @@ import {
   TONE,
   ValueCard,
   pressable,
+  textTone,
   useSvgId,
   type Tone,
 } from './kit';
@@ -203,22 +204,26 @@ export function ListScene({
           return (
             <Mover key={id} x={p.x} y={p.y} enterFrom={{ dx: 0, dy: 16 }}>
               {(walking) => (
-                <g
-                  {...pressable(onSelect ? () => onSelect(id) : undefined)}
-                  aria-label={`node ${label(id)}${names.length ? `, referenced by ${names.join(', ')}` : ''}, ${nextOf(id)} ${isNull ? 'is null' : `points to node ${label(nextIds.get(id)!)}`}`}
-                >
-                  <title>{`node ${label(id)}`}</title>
-                  <StickFigure pose={hot ? 'raise' : 'reach'} tone={tone} walking={walking} facing={facing} filter={sketch}>
-                    {/* Worn like a badge: this person's hands are busy with the rope. */}
-                    <ValueCard text={label(id)} tone={tone} held={false} />
-                  </StickFigure>
+                <>
+                  <g
+                    {...pressable(onSelect ? () => onSelect(id) : undefined)}
+                    aria-label={`node ${label(id)}${names.length ? `, referenced by ${names.join(', ')}` : ''}, ${nextOf(id)} ${isNull ? 'is null' : `points to node ${label(nextIds.get(id)!)}`}`}
+                  >
+                    <title>{`node ${label(id)}`}</title>
+                    <StickFigure pose={hot ? 'raise' : 'reach'} tone={tone} walking={walking} facing={facing} filter={sketch}>
+                      {/* Worn like a badge: this person's hands are busy with the rope. */}
+                      <ValueCard text={label(id)} tone={tone} held={false} />
+                    </StickFigure>
+                    {selected === id && (
+                      <ellipse cx={0} cy={-30} rx={34} ry={46} fill="none" stroke={INK} strokeWidth={1.6} strokeDasharray="4 5" />
+                    )}
+                  </g>
+                  {/* The labels around the person sit outside the button, so the button's visible text is
+                      its value, which its name contains (WCAG 2.5.3); the name still says all of this. */}
                   {/* Beside the loose end of the rope, above the ground line. */}
                   {isNull && <Label x={34} y={-6} text="null" size={15} color="#5b6178" anchor="start" />}
-                  {selected === id && (
-                    <ellipse cx={0} cy={-30} rx={34} ry={46} fill="none" stroke={INK} strokeWidth={1.6} strokeDasharray="4 5" />
-                  )}
                   <Flags x={0} y={-72} names={names} faint={faint} />
-                  {note && <Label x={0} y={24} text={note} size={15} color={TONE[tone]} />}
+                  {note && <Label x={0} y={24} text={note} size={15} color={textTone(tone)} />}
                   {overlay && (
                     <Label
                       x={0}
@@ -228,7 +233,7 @@ export function ListScene({
                       color="#5b6178"
                     />
                   )}
-                </g>
+                </>
               )}
             </Mover>
           );

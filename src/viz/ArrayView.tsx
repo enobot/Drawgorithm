@@ -139,7 +139,8 @@ export function Cells(props: CellsProps) {
                 key={key}
                 layout
                 initial={{ opacity: 0, scale: 0.7 }}
-                animate={{ opacity: dim ? 0.3 : 1, scale: 1 }}
+                // Cells outside the window fade, but their values stay readable (4.5:1, WCAG 1.4.3).
+                animate={{ opacity: dim ? 0.6 : 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.15 } }}
                 transition={GLIDE}
                 className="flex flex-col items-center"
@@ -165,7 +166,7 @@ export function Cells(props: CellsProps) {
                     <CellValue v={v} heap={heap} isString={isString} shapeOf={shapeOf} />
                   )}
                 </motion.div>
-                <span className={`mt-1 text-[11.5px] tabular-nums ${state === 'idle' ? 'text-navy-500' : 'font-semibold text-navy-200'}`}>
+                <span className={`mt-1 text-[11.5px] tabular-nums ${state === 'idle' ? 'text-navy-400' : 'font-semibold text-navy-200'}`}>
                   {i}
                 </span>
                 {label && <span className={`text-[10.5px] font-semibold leading-3 ${style.labelColor}`}>{label}</span>}
@@ -240,12 +241,12 @@ function StackView({ items, heap, reads, writes, result, currentNode, comparing,
                 className={`flex h-11 min-w-[104px] items-center justify-between gap-3 rounded-xl px-3 ${style.fill} ${style.ring}`}
               >
                 <CellValue v={v} heap={heap} shapeOf={shapeOf} />
-                <span className="text-[11px] tabular-nums text-navy-500">{i}</span>
+                <span className="text-[11px] tabular-nums text-navy-400">{i}</span>
               </motion.div>
             );
           })}
         </AnimatePresence>
-        {items.length === 0 && <span className="px-2 py-2 text-[12px] text-navy-500">empty</span>}
+        {items.length === 0 && <span className="px-2 py-2 text-[12px] text-navy-400">empty</span>}
       </div>
     </div>
   );
@@ -281,7 +282,7 @@ function QueueView({ items, heap, reads, writes, result, currentNode, comparing,
           );
         })}
       </AnimatePresence>
-      {items.length === 0 && <span className="px-1 text-[12px] text-navy-500">empty</span>}
+      {items.length === 0 && <span className="px-1 text-[12px] text-navy-400">empty</span>}
     </div>
   );
 }
@@ -336,7 +337,7 @@ function DequeView({ items, heap, reads, writes, result, currentNode, comparing,
                 >
                   <CellValue v={v} heap={heap} shapeOf={shapeOf} />
                 </div>
-                <span className="text-[11px] tabular-nums text-navy-500">{i}</span>
+                <span className="text-[11px] tabular-nums text-navy-400">{i}</span>
                 {extras.lookups.map((l) =>
                   l.values[i] !== undefined ? (
                     <span key={l.name} className="flex flex-col items-center whitespace-nowrap text-[11px] leading-tight text-navy-400">
@@ -351,7 +352,7 @@ function DequeView({ items, heap, reads, writes, result, currentNode, comparing,
             );
           })}
         </AnimatePresence>
-        {items.length === 0 && <span className="mt-2.5 px-1 text-[12px] text-navy-500">empty</span>}
+        {items.length === 0 && <span className="mt-2.5 px-1 text-[12px] text-navy-400">empty</span>}
         <span className="mt-3 shrink-0 text-[10.5px] font-semibold text-navy-400">back</span>
       </div>
       {extras.lookups.map((l) => {
@@ -369,10 +370,10 @@ function DequeView({ items, heap, reads, writes, result, currentNode, comparing,
 function GhostCell({ label, width }: { label: string; width: number }) {
   return (
     <div className="flex flex-col items-center" style={{ width }} title={`index ${label} is outside the array`}>
-      <div className="flex size-[52px] items-center justify-center rounded-2xl text-[10.5px] text-navy-500 shadow-[inset_0_0_0_1.5px_rgb(63_91_138/0.8)] [background:repeating-linear-gradient(135deg,transparent_0_6px,rgb(63_91_138/0.18)_6px_8px)]">
+      <div className="flex size-[52px] items-center justify-center rounded-2xl text-[10.5px] text-navy-400 shadow-[inset_0_0_0_1.5px_rgb(63_91_138/0.8)] [background:repeating-linear-gradient(135deg,transparent_0_6px,rgb(63_91_138/0.18)_6px_8px)]">
         outside
       </div>
-      <span className="mt-1 text-[11.5px] tabular-nums text-navy-500">{label}</span>
+      <span className="mt-1 text-[11.5px] tabular-nums text-navy-400">{label}</span>
     </div>
   );
 }
@@ -404,7 +405,7 @@ export function ArrayView(props: ArrayViewProps) {
   const { arr, heap } = props;
   if (arr.total === 0 && props.role === 'array') {
     return (
-      <div className="inline-flex h-12 items-center rounded-2xl px-4 text-[12.5px] text-navy-500 shadow-[inset_0_0_0_1.5px_rgb(63_91_138/0.7)]">
+      <div className="inline-flex h-12 items-center rounded-2xl px-4 text-[12.5px] text-navy-400 shadow-[inset_0_0_0_1.5px_rgb(63_91_138/0.7)]">
         empty
       </div>
     );
@@ -437,7 +438,7 @@ function GridView({ arr, heap, markers, cellReadsFor, cellWritesFor, comparing }
     <div className="inline-grid gap-1.5" style={{ gridTemplateColumns: `auto repeat(${cols}, 2.75rem)` }}>
       <span />
       {Array.from({ length: cols }, (_, c) => (
-        <span key={c} className="flex flex-col items-center gap-0.5 text-[11.5px] tabular-nums text-navy-500">
+        <span key={c} className="flex flex-col items-center gap-0.5 text-[11.5px] tabular-nums text-navy-400">
           {colMarkers
             .filter((m) => m.index === c)
             .map((m) => (
@@ -448,7 +449,7 @@ function GridView({ arr, heap, markers, cellReadsFor, cellWritesFor, comparing }
       ))}
       {rows.map((row, r) => (
         <div key={r} className="contents">
-          <span className="flex items-center justify-end gap-1 pr-1.5 text-[11.5px] tabular-nums text-navy-500">
+          <span className="flex items-center justify-end gap-1 pr-1.5 text-[11.5px] tabular-nums text-navy-400">
             {rowMarkers
               .filter((m) => m.index === r)
               .map((m) => (

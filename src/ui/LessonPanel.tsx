@@ -21,7 +21,7 @@ export function LessonPanel({ problemId }: { problemId: string }) {
       </p>
       <section className="flex flex-col gap-1.5">
         <h3 className="section-title">What to watch</h3>
-        <ol className="flex list-decimal flex-col gap-1 pl-5 text-[13.5px] leading-snug text-navy-200 marker:text-navy-500">
+        <ol className="flex list-decimal flex-col gap-1 pl-5 text-[13.5px] leading-snug text-navy-200 marker:text-navy-400">
           {watch.map((w) => (
             <li key={w}>{w}</li>
           ))}

@@ -39,7 +39,7 @@ export function Inspector({ step, output }: { step: Step; output: OutputLine[] }
               </div>
             ))
           ) : (
-            <span className="text-navy-500">console.log output appears here.</span>
+            <span className="text-navy-400">console.log output appears here.</span>
           )}
         </div>
       </section>

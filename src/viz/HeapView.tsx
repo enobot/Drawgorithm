@@ -98,7 +98,7 @@ export function HeapView(props: HeapViewProps) {
   return (
     <div className="flex flex-col gap-3">
       {n === 0 ? (
-        <div className="inline-flex h-12 items-center self-start rounded-2xl px-4 text-[12.5px] text-navy-500 shadow-[inset_0_0_0_1.5px_rgb(63_91_138/0.7)]">
+        <div className="inline-flex h-12 items-center self-start rounded-2xl px-4 text-[12.5px] text-navy-400 shadow-[inset_0_0_0_1.5px_rgb(63_91_138/0.7)]">
           empty heap
         </div>
       ) : (

@@ -16,13 +16,17 @@ import {
 } from './analysis';
 import { ArrayView, Cells, isGrid, type ArrayRole, type DequeExtras } from './ArrayView';
 import { BitRows } from './BitsView';
+import { numbersOf } from './illustrated/gumdrop';
+import { GumdropScene } from './illustrated/GumdropScene';
 import { lastRead, trackArrayItems } from './illustrated/identity';
 import { ListScene } from './illustrated/ListScene';
+import { NotebookScene } from './illustrated/NotebookScene';
 import { QueueScene } from './illustrated/QueueScene';
 import { ShelfScene } from './illustrated/ShelfScene';
 import type { ShapeOf, StructureBinding } from './bindings';
 import type { Focus } from './focus';
 import { DRAWN_ABOVE, SpecialStructures } from './Special';
+import { StatCards } from './StatCards';
 import { trieRootOf } from './structures';
 import type { ListSlot } from './listLayout';
 import { ListView } from './ListView';
@@ -170,6 +174,27 @@ function StructureFor({
         />
       );
       // Illustrated scenes, where a real-life picture fits the operation. Everything else stays technical.
+      // Problems that opt in to the gumdrop cast draw a fully recorded row of numbers as gumdrops.
+      const values =
+        ctx.illustrated && view?.scene === 'gumdrops' && role === 'array' && h.total === h.items.length && !isGrid(h, heap)
+          ? numbersOf(h.items)
+          : null;
+      if (values) {
+        return withScene(
+          ctx,
+          <GumdropScene
+            values={values}
+            name={name}
+            markers={markers}
+            reads={reads}
+            writes={writes}
+            result={result}
+            comparing={active && isComparison(step)}
+            lookingDown={active && [...focus.mapLookups.values()].some((l) => l.length > 0)}
+          />,
+          drawing,
+        );
+      }
       if (ctx.illustrated && role === 'queue') {
         return withScene(
           ctx,
@@ -219,17 +244,27 @@ function StructureFor({
       }
       return drawing;
     }
-    case 'map':
-      return (
-        <MapView
-          map={h}
-          heap={heap}
-          lookups={active ? (focus.mapLookups.get(h.id) ?? []) : []}
-          inserts={active ? (focus.mapInserts.get(h.id) ?? []) : []}
-          columns={view?.mapColumns}
-          shapeOf={ctx.shapeOf}
-        />
-      );
+    case 'map': {
+      const lookups = active ? (focus.mapLookups.get(h.id) ?? []) : [];
+      const inserts = active ? (focus.mapInserts.get(h.id) ?? []) : [];
+      const drawing = <MapView map={h} heap={heap} lookups={lookups} inserts={inserts} columns={view?.mapColumns} shapeOf={ctx.shapeOf} />;
+      if (ctx.illustrated && view?.scene === 'gumdrops') {
+        return withScene(
+          ctx,
+          <NotebookScene
+            map={h}
+            heap={heap}
+            name={name}
+            lookups={lookups}
+            inserts={inserts}
+            columns={view?.mapColumns}
+            shapeOf={ctx.shapeOf}
+          />,
+          drawing,
+        );
+      }
+      return drawing;
+    }
     case 'set':
       return (
         <SetView
@@ -357,6 +392,11 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
   }
   const anyCompute = active && [...focus.compute.keys()].some((n) => focus.declared.has(n));
   const comparing = active && isComparison(step);
+  // A problem's key variables as big stat cards in the Illustrated style (in place of their small
+  // blocks there; the "Both" view keeps the blocks too).
+  const statNames = ctx.illustrated ? (ctx.view?.statCards ?? []) : [];
+  const showStats = statNames.some((n) => frame.vars.some((v) => v.name === n));
+  const shownBlocks = showStats && !ctx.technical ? blocks.filter((v) => !statNames.includes(v.name)) : blocks;
 
   if (!frame.vars.length) {
     return <p className="text-[13px] text-navy-400">No variables yet.</p>;
@@ -364,10 +404,11 @@ export function FrameContent({ frame, ctx, active }: { frame: FrameSnap; ctx: Bo
 
   return (
     <div className="flex flex-col gap-5">
-      {blocks.length > 0 && (
+      {showStats && <StatCards names={statNames} frame={frame} heap={heap} focus={focus} active={active} comparing={comparing} />}
+      {shownBlocks.length > 0 && (
         <div className="flex flex-wrap items-start gap-x-5 gap-y-4">
           <AnimatePresence initial={false}>
-            {blocks.map((v) => {
+            {shownBlocks.map((v) => {
               let state: BlockState = 'idle';
               if (active) {
                 if (focus.declared.has(v.name)) state = 'new';
@@ -461,8 +502,8 @@ export function IllustratedNote() {
   return (
     <p className="max-w-2xl text-[12.5px] text-navy-400">
       Illustrated so far: queues (a line at a counter), linked lists (people holding ropes) and arrays read through index variables
-      (numbered shelves). Trees, maps, sets, stacks, grids, heaps, deques, graphs, tries and union-find forests are still drawn the
-      technical way.
+      (numbered shelves). In Two Sum, numbers are gumdrops and the map is a notebook; more problems will follow. Trees, maps, sets, stacks,
+      grids, heaps, deques, graphs, tries and union-find forests are otherwise still drawn the technical way.
     </p>
   );
 }

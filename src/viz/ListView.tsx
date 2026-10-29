@@ -252,7 +252,7 @@ export function ListView({ diagram, heap, labels, current, written, created, hig
                   <span className="flex flex-1 items-center justify-center">{label(id)}</span>
                   <span
                     className={`flex items-center justify-center border-l text-[10px] font-semibold transition-colors duration-300 ${
-                      rewired ? 'border-amber-300/50 bg-amber-300/15 text-amber-200' : 'border-navy-500/40 text-navy-400'
+                      rewired ? 'border-amber-300/50 bg-amber-300/15 text-amber-200' : 'border-navy-500/40 text-navy-300'
                     }`}
                     style={{ width: PTR_W }}
                   >

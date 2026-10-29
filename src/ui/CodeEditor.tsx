@@ -68,7 +68,10 @@ export function CodeEditor({ value, onChange, onRun, onCursorLine, onSave, marks
       renderLineHighlight: 'none',
       tabSize: 2,
       padding: { top: 12, bottom: 12 },
-      ariaLabel: 'Code editor. Press Control+Enter to run.',
+      // Tab indents inside the editor; Monaco's Toggle Tab Key Moves Focus (Control+M, or
+      // Control+Shift+M on a Mac) lets keyboard users leave it, so say so (WCAG 2.1.2).
+      ariaLabel:
+        'Code editor. Press Control+Enter to run. Tab indents; press Control+M (Control+Shift+M on a Mac) to make Tab move focus instead.',
       wordBasedSuggestions: 'currentDocument',
       fixedOverflowWidgets: true,
       // Monaco's EditContext input is marked experimental; the textarea input is the stable path.

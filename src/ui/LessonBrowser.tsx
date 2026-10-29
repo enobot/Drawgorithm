@@ -4,6 +4,7 @@ import { LESSON_CONTENT, LESSON_LEVELS } from '../learn/lessons';
 import { lessonProblemId } from '../learn/problems';
 import { LESSONS } from '../practice/foundations';
 import { useStore } from '../state/store';
+import { holdFocusInDialog } from './modal';
 
 /** The concept lessons, from the basics to the advanced patterns. */
 export function LessonBrowser({ onClose }: { onClose: () => void }) {
@@ -13,7 +14,13 @@ export function LessonBrowser({ onClose }: { onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    // Focus stays in the list while it is open, and goes back to the button that opened it.
+    const release = holdFocusInDialog();
     closeRef.current?.focus();
+    return release;
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

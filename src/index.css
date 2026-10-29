@@ -79,7 +79,7 @@
   @apply inline-flex items-center justify-center size-8 rounded-full text-[17px] font-semibold text-navy-200 hover:bg-navy-700 hover:text-navy-100 transition-colors disabled:opacity-30 pointer-coarse:size-11;
 }
 @utility field {
-  @apply w-full rounded-lg bg-navy-950 border border-navy-700 px-2.5 py-1.5 font-mono text-[13px] text-navy-100 placeholder:text-navy-500 hover:border-navy-500 focus:border-teal-400 focus:outline-none;
+  @apply w-full rounded-lg bg-navy-950 border border-navy-700 px-2.5 py-1.5 font-mono text-[13px] text-navy-100 placeholder:text-navy-400 hover:border-navy-500 focus:border-teal-400 focus:outline-none;
 }
 @utility section-title {
   @apply text-[13px] font-semibold text-navy-300;
@@ -96,7 +96,8 @@
   box-shadow: inset 3px 0 0 #2dd4bf;
 }
 .dg-range-current {
-  background: rgb(45 212 191 / 0.22);
+  /* Over the current-line highlight, light enough that every token stays at 4.5:1 or more. */
+  background: rgb(45 212 191 / 0.16);
   border-radius: 3px;
 }
 .dg-line-previous {
@@ -191,6 +192,39 @@
 }
 .dg-walk .dg-leg-b {
   animation: dg-leg 0.32s ease-in-out infinite alternate-reverse;
+}
+
+/* The gumdrop cast (docs/DESIGN_SYSTEM.md): a soft pink glow on hover, and sparkles that rise
+   and fade once when an answer is found. With reduced motion they stay still instead. */
+.dg-gum {
+  transition: filter 0.2s ease;
+}
+.dg-gum:hover {
+  filter: drop-shadow(0 0 7px rgb(244 182 204 / 0.75));
+}
+@keyframes dg-sparkle {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(1.1);
+  }
+}
+.dg-sparkle {
+  animation: dg-sparkle 1.2s ease-out both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dg-sparkle {
+    animation: none !important;
+    opacity: 0.9;
+  }
 }
 
 /* iOS zooms the whole page into any text field under 16px, so on touch screens fields

@@ -29,7 +29,7 @@ export function MapView({ map, heap, lookups, inserts, columns = ['key', 'value'
         </span>
         <span>{columns[1]}</span>
       </div>
-      {map.total === 0 && missing.length === 0 && <div className="px-2 py-1.5 text-[12.5px] text-navy-500">empty</div>}
+      {map.total === 0 && missing.length === 0 && <div className="px-2 py-1.5 text-[12.5px] text-navy-400">empty</div>}
       <AnimatePresence initial={false}>
         {map.entries.map(([k, v]) => {
           const inserted = inserts.some((x) => same(x, k));
@@ -46,7 +46,7 @@ export function MapView({ map, heap, lookups, inserts, columns = ['key', 'value'
               className={`grid grid-cols-[1fr_1.25rem_1fr] items-center gap-2 rounded-2xl px-3 py-2 text-[15px] font-semibold transition-shadow duration-300 ${style.fill} ${style.ring}`}
             >
               <ValueText v={k} heap={heap} shapeOf={shapeOf} compact />
-              <span className="text-center text-navy-500" aria-hidden>
+              <span className="text-center text-navy-400" aria-hidden>
                 →
               </span>
               <span className="flex items-center gap-2">
@@ -86,7 +86,7 @@ export function SetView({ set, heap, lookups, adds }: SetViewProps) {
   const missing = lookups.filter((l) => !l.found);
   return (
     <div className={`flex min-h-14 flex-wrap items-center gap-2 px-3 py-2.5 ${CARD}`}>
-      {set.total === 0 && <span className="px-1 text-[12.5px] text-navy-500">empty</span>}
+      {set.total === 0 && <span className="px-1 text-[12.5px] text-navy-400">empty</span>}
       <AnimatePresence initial={false}>
         {set.items.map((v) => {
           const added = adds.some((x) => same(x, v));
@@ -129,7 +129,7 @@ export function ObjectView({ obj, heap, writes, shapeOf }: ObjectViewProps) {
   return (
     <div className={`inline-flex min-w-44 flex-col gap-1 p-2.5 ${CARD}`}>
       {obj.className && obj.className !== 'Object' && <div className="px-2 text-[11.5px] font-semibold text-navy-400">{obj.className}</div>}
-      {obj.entries.length === 0 && <div className="px-2 py-1 text-[12.5px] text-navy-500">no fields</div>}
+      {obj.entries.length === 0 && <div className="px-2 py-1 text-[12.5px] text-navy-400">no fields</div>}
       {obj.entries.map(([k, v]) => {
         const changed = writes.has(k);
         const style = STATE[changed ? 'changed' : 'idle'];

@@ -57,7 +57,14 @@ function AnswerCode({ code, marks }: { code: string; marks: EditorMarks }) {
     if (current !== null) box.current?.querySelector(`[data-line="${current}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [current]);
   return (
-    <div ref={box} className="h-full overflow-auto py-3 font-mono text-[14px] leading-[22px]" aria-label="Answer code (read-only)">
+    // Focusable, so the answer can be scrolled with the keyboard.
+    <div
+      ref={box}
+      tabIndex={0}
+      role="region"
+      className="h-full overflow-auto py-3 font-mono text-[14px] leading-[22px]"
+      aria-label="Answer code (read-only)"
+    >
       {code
         .replace(/\n$/, '')
         .split('\n')
@@ -67,7 +74,7 @@ function AnswerCode({ code, marks }: { code: string; marks: EditorMarks }) {
             line === current ? 'bg-teal-400/15 shadow-[inset_3px_0_0_0_#5eead4]' : line === marks.previousLine ? 'bg-navy-800/70' : '';
           return (
             <div key={line} data-line={line} className={`flex whitespace-pre pr-4 ${mark}`}>
-              <span className="w-12 shrink-0 select-none pr-4 text-right text-navy-500">{line}</span>
+              <span className="w-12 shrink-0 select-none pr-4 text-right text-navy-400">{line}</span>
               <span className="text-navy-100">{text || ' '}</span>
             </div>
           );
@@ -283,7 +290,10 @@ export function EditorPanel() {
               {live.error.message}
             </span>
           ) : (
-            <span className="text-navy-400">Ctrl+Enter runs the code. ← → step through it when the editor isn’t focused.</span>
+            <span className="text-navy-400">
+              Ctrl+Enter runs the code. ← → step through it when the editor isn’t focused. In the editor, Tab indents: press Ctrl+M
+              (Ctrl+Shift+M on a Mac) to make Tab move focus.
+            </span>
           )}
         </p>
         <SupportedJs />

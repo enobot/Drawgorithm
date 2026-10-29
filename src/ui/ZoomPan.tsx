@@ -228,6 +228,10 @@ export function ZoomPan({ children, controlsSlot }: { children: ReactNode; contr
         // vertical scroll hands over to the view around the board.
         className={`board-grid absolute inset-0 overflow-auto overscroll-x-contain px-4 pt-4 pb-16 ${dragging ? 'cursor-grabbing select-none' : ''}`}
         style={{ touchAction: 'pan-x pan-y' }}
+        // Focusable, so a drawing larger than the board can be scrolled with the keyboard.
+        tabIndex={0}
+        role="region"
+        aria-label="Drawing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}

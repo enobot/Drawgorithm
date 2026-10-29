@@ -1,6 +1,7 @@
-// The Python answers on real CPython (Pyodide, loaded from node_modules): every answer passes
-// every example and test of its exercise, draws what the exercise needs, and keeps the rules
-// the outputs alone cannot show, as the JavaScript references do (foundations.test.ts).
+// The Python answers on real CPython (Pyodide, loaded from node_modules): every answer, in
+// every collection, passes every example and test of its exercise, draws what the exercise
+// needs, and keeps the rules the outputs alone cannot show, as the JavaScript references do
+// (foundations.test.ts, interview.test.ts).
 import { loadPyodide, type PyodideAPI } from 'pyodide';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { installTracer, runPython } from '../engine/python/runPython';
@@ -9,7 +10,7 @@ import type { RunResult } from '../trace/types';
 import { resolveBindings } from '../viz/bindings';
 import { readCallTree } from '../viz/structures';
 import { checkExercise } from './check';
-import { FOUNDATIONS } from './foundations';
+import { ALL_EXERCISES, findExercise } from './collections';
 import { answerIn, PYTHON_ANSWERS, PYTHON_EXPLANATIONS } from './python';
 import type { Exercise, ExerciseCase } from './schema';
 
@@ -20,8 +21,8 @@ beforeAll(async () => {
   installTracer(py);
 }, 120_000);
 
-const available = FOUNDATIONS.filter((e) => e.status === 'available');
-const exercise = (id: string) => FOUNDATIONS.find((x) => x.id === id)!;
+const available = ALL_EXERCISES.filter((e) => e.status === 'available');
+const exercise = (id: string) => findExercise(id)!;
 
 function runCase(e: Exercise, c: ExerciseCase, maxSteps?: number): RunResult {
   const content = e.content!;
@@ -198,5 +199,145 @@ describe('Python answers keep the rules the outputs alone cannot show', () => {
     // Each index is popped at most once, and each reading ends one check: at most 2n checks.
     // Rescanning every stretch would take (n - k + 1) · k = 820.
     expect(stepsAt(e, run, 'while ')).toBeLessThanOrEqual(2 * readings.length);
+  });
+
+  it('Majority Vote: keeps no set, dict or list of its own', () => {
+    const e = exercise('i100-004');
+    for (const x of [...e.content!.examples, ...e.content!.tests]) {
+      const ids = new Set(
+        runCase(e, x)
+          .steps.flatMap((s) => Object.values(s.heap))
+          .map((h) => h.id),
+      );
+      expect(ids.size, x.note).toBe(1);
+    }
+  });
+
+  it('Unbroken Badge Run: counts each run only from its start', () => {
+    const e = exercise('i100-008');
+    const badges = Array.from({ length: 60 }, (_, i) => (i * 7) % 61);
+    const run = runCase(e, { inputs: { badges }, output: null, note: 'long' }, 20_000);
+    expect(run.status, run.error?.message).toBe('finished');
+    expect(stepsAt(e, run, 'length += 1')).toBeLessThanOrEqual(badges.length);
+  });
+
+  it('Undoable Minimum: does the same work per operation however tall the pile', () => {
+    const e = exercise('i100-019');
+    const stepsPerOp = (n: number) => {
+      const ops = [...Array.from({ length: n }, (_, i) => ['push', 100 - i]), ...Array.from({ length: n }, () => ['min'])];
+      const run = runCase(e, { inputs: { ops }, output: null, note: 'tall pile' }, 20_000);
+      expect(run.status, run.error?.message).toBe('finished');
+      return run.steps.length / ops.length;
+    };
+    expect(stepsPerOp(40) / stepsPerOp(10)).toBeLessThan(1.15);
+  });
+
+  it('Chain Gap Removal and Fold the Chain: reuse the nodes (only a placeholder is created)', () => {
+    for (const [id, allowed] of [
+      ['i100-028', 1],
+      ['i100-029', 0],
+    ] as const) {
+      const e = exercise(id);
+      for (const x of [...e.content!.examples, ...e.content!.tests]) {
+        const created = runCase(e, x)
+          .steps.flatMap((s) => s.effects)
+          .filter((f) => f.type === 'create' && f.className === 'ListNode');
+        expect(created.length, `${id} ${x.note}`).toBeLessThanOrEqual(allowed);
+      }
+    }
+  });
+
+  it('Shadow Copy: the copy is made of new cards', () => {
+    const e = exercise('i100-030');
+    for (const x of [...e.content!.examples, ...e.content!.tests]) {
+      const run = runCase(e, x);
+      const cards = Object.values(run.steps[run.steps.length - 1].heap).filter((h) => h.kind === 'object' && h.className === 'Card');
+      expect(cards.length, x.note).toBe(2 * (x.inputs.entries as unknown[]).length);
+    }
+  });
+
+  it('Repeated Ticket: keeps nothing of its own and never writes to tickets', () => {
+    const e = exercise('i100-032');
+    for (const x of [...e.content!.examples, ...e.content!.tests]) {
+      const run = runCase(e, x);
+      expect(new Set(run.steps.flatMap((s) => Object.values(s.heap)).map((h) => h.id)).size, x.note).toBe(1);
+      expect(
+        run.steps.flatMap((s) => s.effects).filter((f) => f.type === 'index-write'),
+        x.note,
+      ).toEqual([]);
+    }
+  });
+
+  it('Flip in Groups and Mirror the Tree: create no nodes (Flip only its placeholder)', () => {
+    for (const [id, cls, allowed] of [
+      ['i100-033', 'ListNode', 1],
+      ['i100-034', 'TreeNode', 0],
+    ] as const) {
+      const e = exercise(id);
+      for (const x of [...e.content!.examples, ...e.content!.tests]) {
+        const created = runCase(e, x)
+          .steps.flatMap((s) => s.effects)
+          .filter((f) => f.type === 'create' && f.className === cls);
+        expect(created.length, `${id} ${x.note}`).toBeLessThanOrEqual(allowed);
+      }
+    }
+  });
+
+  it('Tree to Text and Back: the rebuilt tree is made of new nodes, one per node', () => {
+    const e = exercise('i100-047');
+    for (const x of [...e.content!.examples, ...e.content!.tests]) {
+      const created = runCase(e, x)
+        .steps.flatMap((s) => s.effects)
+        .filter((f) => f.type === 'create' && f.className === 'TreeNode');
+      expect(created.length, x.note).toBe((x.inputs.root as unknown[]).filter((v) => v !== null).length);
+    }
+  });
+
+  it('Fast Power: makes O(log n) calls', () => {
+    const e = exercise('i100-053');
+    const run = runCase(e, { inputs: { x: 1, n: 1000 }, output: 1, note: 'large power' });
+    expect(run.status, run.error?.message).toBe('finished');
+    expect(run.steps.filter((s) => s.kind === 'enter').length).toBeLessThanOrEqual(Math.ceil(Math.log2(1000)) + 2);
+  });
+
+  it('Map Copy: the copy is made of new towns', () => {
+    const e = exercise('i100-060');
+    for (const x of [...e.content!.examples, ...e.content!.tests]) {
+      const run = runCase(e, x);
+      const towns = Object.values(run.steps[run.steps.length - 1].heap).filter((h) => h.kind === 'object' && h.className === 'Vertex');
+      expect(towns.length, x.note).toBe(2 * (x.inputs.graph as unknown[]).length);
+    }
+  });
+
+  it('Steepest Climb: solves each cell once (at most five calls per cell)', () => {
+    const e = exercise('i100-079');
+    for (const x of [...e.content!.examples, ...e.content!.tests]) {
+      const run = runCase(e, x);
+      const calls = run.steps.filter((s) => s.kind === 'enter' && s.frames[s.frames.length - 1].name === 'longest').length;
+      expect(calls, x.note).toBeLessThanOrEqual(5 * (x.inputs.grid as number[][]).flat().length);
+    }
+  });
+
+  it('Missing Badge and Happy Digits: keep no set, dict or list of their own', () => {
+    for (const [id, inputObjects] of [
+      ['i100-095', 1],
+      ['i100-096', 0],
+    ] as const) {
+      const e = exercise(id);
+      for (const x of [...e.content!.examples, ...e.content!.tests]) {
+        const run = runCase(e, x);
+        expect(new Set(run.steps.flatMap((s) => Object.values(s.heap)).map((h) => h.id)).size, `${id} ${x.note}`).toBe(inputObjects);
+      }
+    }
+  });
+
+  it('Zero Spread: creates no list (it marks the grid itself)', () => {
+    const e = exercise('i100-099');
+    for (const x of [...e.content!.examples, ...e.content!.tests]) {
+      const created = runCase(e, x)
+        .steps.flatMap((s) => s.effects)
+        .filter((f) => f.type === 'create');
+      expect(created, x.note).toEqual([]);
+    }
   });
 });

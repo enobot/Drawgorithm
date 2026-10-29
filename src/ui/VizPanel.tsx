@@ -4,7 +4,7 @@ import { RunView } from './RunView';
 
 const STYLE_LABEL: Record<ViewStyle, string> = { illustrated: 'Illustrated', technical: 'Technical', both: 'Both' };
 const STYLE_TITLE: Record<ViewStyle, string> = {
-  illustrated: 'Scenes with people, shelves and ropes, drawn from the same run.',
+  illustrated: 'Scenes with people, shelves, ropes and gumdrops, drawn from the same run.',
   technical: 'Cells, nodes and arrows, with every value spelled out.',
   both: 'Each scene with its technical drawing underneath, at the same step.',
 };

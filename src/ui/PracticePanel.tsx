@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { LANGUAGES } from '../languages';
 import { lessonProblemId } from '../learn/problems';
 import { checkExercise, type CaseResult } from '../practice/check';
-import { FOUNDATIONS, LESSONS } from '../practice/foundations';
+import { findExercise } from '../practice/collections';
+import { LESSONS } from '../practice/foundations';
 import { answerIn } from '../practice/python';
 import type { Exercise } from '../practice/schema';
 import { currentWork, useStore, workLanguage } from '../state/store';
@@ -163,7 +164,13 @@ function Reference({ exercise }: { exercise: Exercise }) {
         {answer.explanation.map((p) => (
           <p key={p}>{p}</p>
         ))}
-        <pre className="overflow-x-auto rounded-lg bg-navy-950 p-3 font-mono text-[12.5px] leading-relaxed text-navy-100">
+        {/* Focusable, so the code can be scrolled sideways with the keyboard. */}
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label="Reference solution code"
+          className="overflow-x-auto rounded-lg bg-navy-950 p-3 font-mono text-[12.5px] leading-relaxed text-navy-100"
+        >
           {answer.code}
         </pre>
         <p>
@@ -175,13 +182,13 @@ function Reference({ exercise }: { exercise: Exercise }) {
   );
 }
 
-/** Everything a Foundations 75 exercise adds to the problem panel. */
+/** Everything a practice exercise (from any collection) adds to the problem panel. */
 export function PracticePanel({ exerciseId }: { exerciseId: string }) {
-  const exercise = FOUNDATIONS.find((e) => e.id === exerciseId);
+  const exercise = findExercise(exerciseId);
   const selectProblem = useStore((s) => s.selectProblem);
   if (!exercise?.content) return null;
   const c = exercise.content;
-  const related = exercise.related.map((id) => FOUNDATIONS.find((e) => e.id === id)!).filter(Boolean);
+  const related = exercise.related.map((id) => findExercise(id)!).filter(Boolean);
   return (
     // Keyed by exercise so hints and check results start fresh for each one.
     <div key={exercise.id} className="flex flex-col gap-5">

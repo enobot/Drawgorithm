@@ -196,7 +196,7 @@ export function BindingsPanel({ bindings }: { bindings: ResolvedBindings }) {
                     {c}
                   </label>
                 ))}
-                <span className="text-navy-500">
+                <span className="text-navy-400">
                   ({a.pointerSource === 'user' ? 'your choice' : 'detected from indexing like nums[i]'})
                 </span>
               </fieldset>

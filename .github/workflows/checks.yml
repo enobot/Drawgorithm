@@ -1,0 +1,29 @@
+# Runs on every push and pull request: types, lint, every test (Python answers run on real
+# CPython through Pyodide from node_modules), formatting, the production build, and known
+# vulnerabilities in dependencies. A failing step fails the run.
+name: Checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # An LTS line every tool here supports (Vite, Vitest 5, ESLint); see docs/LAUNCH-READINESS.md.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run format:check
+      - run: npm run build
+      # The shipped third-party licence notices must match the installed dependencies.
+      - run: node scripts/third-party-notices.mjs --check
+      - run: npm audit --audit-level=high

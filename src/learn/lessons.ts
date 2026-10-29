@@ -88,7 +88,7 @@ export const LESSON_CONTENT: Lesson[] = [
     level: 'Basics',
     idea: [
       'A for loop walks an index through the array: where it starts, when it stops and how it steps decide which slots are visited.',
-      'Comparing neighbors means reading i − 1 and i, so the loop starts at 1. Off-by-one mistakes (starting at 0, or stopping at length instead of length − 1) are the most common loop bugs.',
+      'Comparing neighbors means reading i − 1 and i, so the loop starts at 1. Off-by-one mistakes (starting at 0, or stopping at length instead of length − 1) are easy to make here.',
     ],
     demoExplanation:
       'The loop starts at 1 so every slot has a slot before it. Each round compares readings[i] with readings[i − 1] and counts a rise.',

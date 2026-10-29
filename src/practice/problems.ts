@@ -2,7 +2,8 @@
 // visible examples become selectable cases; the additional tests stay with the
 // exercise and are run by "Check all tests".
 import type { ProblemDef } from '../problems/catalog';
-import { FOUNDATIONS, TOPICS } from './foundations';
+import { ALL_EXERCISES, collectionOf } from './collections';
+import { TOPICS } from './foundations';
 import type { Exercise } from './schema';
 
 export function practiceProblem(e: Exercise): ProblemDef | undefined {
@@ -11,7 +12,7 @@ export function practiceProblem(e: Exercise): ProblemDef | undefined {
   return {
     id: e.id,
     title: `${e.number}. ${e.title}`,
-    tags: ['Foundations 75', TOPICS.find((t) => t.id === e.topic)?.title ?? e.topic, e.difficulty],
+    tags: [collectionOf(e.id)?.short ?? 'Practice', TOPICS.find((t) => t.id === e.topic)?.title ?? e.topic, e.difficulty],
     description: c.statement,
     // The starter is only a stub, so there is no "how the starter code works" note.
     explanation: '',
@@ -26,10 +27,10 @@ export function practiceProblem(e: Exercise): ProblemDef | undefined {
   };
 }
 
-const PRACTICE_PROBLEMS = FOUNDATIONS.map(practiceProblem).filter((p): p is ProblemDef => !!p);
+const PRACTICE_PROBLEMS = ALL_EXERCISES.map(practiceProblem).filter((p): p is ProblemDef => !!p);
 
 export function practiceProblemById(id: string): ProblemDef | undefined {
   return PRACTICE_PROBLEMS.find((p) => p.id === id);
 }
 
-export const isPracticeId = (id: string) => /^f75-\d{2}$/.test(id);
+export const isPracticeId = (id: string) => /^(f75-\d{2}|i100-\d{3})$/.test(id);

@@ -47,7 +47,7 @@ server applying `dist/_headers`). The app loaded, the editor and both workers ra
 initialised, and the browser console showed no policy violations once `data:` fonts were allowed
 (the first attempt blocked an inlined font, which is how that rule was found).
 
-For Vercel, put the same headers in `vercel.json` (`"headers": [{ "source": "/(.*)", "headers": [...] }]`).
+Vercel reads `vercel.json`, which sends the same headers on the same paths; `src/headers.test.ts` fails if the two files ever differ.
 For Nginx, add them with `add_header ... always;` in the `server` block and serve `dist/` with
 `try_files $uri /index.html;`.
 

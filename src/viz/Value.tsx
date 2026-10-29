@@ -144,11 +144,11 @@ export function VarBlock({
           <span className="text-navy-400">{compute.expression}</span>
           {compute.substituted !== compute.expression && (
             <>
-              <span className="text-navy-500"> → </span>
+              <span className="text-navy-400"> → </span>
               <span className="text-violet-200">{compute.substituted}</span>
             </>
           )}
-          <span className="text-navy-500"> = </span>
+          <span className="text-navy-400"> = </span>
           <span className="font-semibold text-amber-200">{compute.result}</span>
         </motion.div>
       )}

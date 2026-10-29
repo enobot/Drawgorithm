@@ -8,13 +8,13 @@ import {
   Flags,
   INK,
   Label,
+  MUTED_TEXT,
   Paper,
   SketchFilter,
   StickFigure,
   ThoughtBubble,
   TONE,
   handWidth,
-  pressable,
   useSvgId,
   type Tone,
 } from './kit';
@@ -135,6 +135,22 @@ export function ShelfScene({
         />
         <line x1={8} y1={FLOOR} x2={width - 8} y2={FLOOR} stroke={INK} strokeWidth={2} strokeLinecap="round" opacity={0.45} />
       </g>
+      {/* Tape on the slots the code has ruled out. It lies under the boxes (whose fill lets it show
+          through), so it never covers their values: tape drawn over the text left it at 2.5:1. */}
+      {ruledOut.map(([a, b]) =>
+        b >= a ? (
+          <rect
+            key={`${a}-${b}`}
+            x={xOf(a) - SLOT / 2 + 3}
+            y={PLANK - 46}
+            width={(b - a + 1) * SLOT - 6}
+            height={48}
+            rx={8}
+            fill={`url(#${sketch}-tape)`}
+            opacity={0.85 * 0.55}
+          />
+        ) : null,
+      )}
       {arr.items.map((v, i) => {
         const x = xOf(i);
         const text = itemText(v, heap, shapeOf);
@@ -151,7 +167,8 @@ export function ShelfScene({
                 : 'idle';
         const w = Math.max(46, handWidth(text, 18) + 16);
         return (
-          <g key={i} {...pressable(() => undefined)} aria-label={`${name}[${i}] = ${text}${outside(i) ? ', ruled out' : ''}`}>
+          // A labelled picture, not a button: pressing a shelf box does nothing.
+          <g key={i} role="img" aria-label={`${name}[${i}] = ${text}${outside(i) ? ', ruled out' : ''}`}>
             <title>{`${name}[${i}] = ${text}`}</title>
             <rect
               x={x - w / 2}
@@ -160,6 +177,7 @@ export function ShelfScene({
               height={40}
               rx={9}
               fill={CARD}
+              fillOpacity={tone === 'muted' ? 0.5 : 1}
               stroke={tone === 'idle' ? INK : TONE[tone]}
               strokeWidth={tone === 'idle' || tone === 'muted' ? 2 : 3.2}
               filter={`url(#${sketch})`}
@@ -170,32 +188,21 @@ export function ShelfScene({
               textAnchor="middle"
               fontSize={18}
               fontFamily="var(--font-hand)"
-              fill={tone === 'muted' ? TONE.muted : INK}
+              fill={tone === 'muted' ? MUTED_TEXT : INK}
             >
               {text}
             </text>
-            <text x={x} y={PLANK + 11} textAnchor="middle" fontSize={13} fontFamily="var(--font-hand)" fill="#fbf8f1">
+            {/* Ink on the wooden plank: light text there was too faint to read (2.1:1). */}
+            <text x={x} y={PLANK + 11} textAnchor="middle" fontSize={13} fontFamily="var(--font-hand)" fill={INK}>
               {i}
             </text>
           </g>
         );
       })}
       {arr.total > n && <Label x={xOf(n) + 10} y={PLANK - 16} text={`+${arr.total - n} more`} anchor="start" size={15} color="#5b6178" />}
-      {/* Tape over the slots the code has ruled out. */}
       {ruledOut.map(([a, b]) =>
         b >= a ? (
-          <g key={`${a}-${b}`} opacity={0.85}>
-            <rect
-              x={xOf(a) - SLOT / 2 + 3}
-              y={PLANK - 46}
-              width={(b - a + 1) * SLOT - 6}
-              height={48}
-              rx={8}
-              fill={`url(#${sketch}-tape)`}
-              opacity={0.55}
-            />
-            <Label x={(xOf(a) + xOf(b)) / 2} y={PLANK - 50} text="ruled out" size={15} color={TONE.problem} />
-          </g>
+          <Label key={`${a}-${b}`} x={(xOf(a) + xOf(b)) / 2} y={PLANK - 50} text="ruled out" size={15} color={TONE.problem} />
         ) : null,
       )}
       {/* Index variables as flags over the slot they hold. */}

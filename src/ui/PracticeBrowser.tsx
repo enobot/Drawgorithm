@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { COLLECTION_TITLE, FOUNDATIONS, TOPICS } from '../practice/foundations';
-import type { Difficulty } from '../practice/schema';
+import { collectionOf, COLLECTIONS, type Collection } from '../practice/collections';
+import { TOPICS } from '../practice/foundations';
+import type { Difficulty, Exercise } from '../practice/schema';
 import { useStore } from '../state/store';
+import { holdFocusInDialog } from './modal';
 
 const DIFFICULTY_STYLE: Record<Difficulty, string> = {
   Easy: 'text-teal-200 shadow-[inset_0_0_0_1px_rgb(94_234_212/0.45)]',
@@ -10,8 +12,17 @@ const DIFFICULTY_STYLE: Record<Difficulty, string> = {
   Hard: 'text-rose-200 shadow-[inset_0_0_0_1px_rgb(251_113_133/0.45)]',
 };
 
+const DIFFICULTIES: Difficulty[] = ['Easy', 'Medium', 'Hard'];
+
+/** A collection's sections: by topic in curriculum order, or by difficulty. */
+function sections(c: Collection): { key: string; title: string; list: Exercise[] }[] {
+  if (c.groupBy === 'difficulty')
+    return DIFFICULTIES.map((d) => ({ key: d, title: d, list: c.exercises.filter((e) => e.difficulty === d) }));
+  return TOPICS.map((t) => ({ key: t.id, title: t.title, list: c.exercises.filter((e) => e.topic === t.id) })).filter((s) => s.list.length);
+}
+
 /**
- * The optional practice collection. Only exercises whose content, tests and drawings
+ * The optional practice collections. Only exercises whose content, tests and drawings
  * are verified can be opened; the rest are listed as planned with their brief.
  */
 export function PracticeBrowser({ onClose }: { onClose: () => void }) {
@@ -19,10 +30,20 @@ export function PracticeBrowser({ onClose }: { onClose: () => void }) {
   const setMobilePane = useStore((s) => s.setMobilePane);
   const problemId = useStore((s) => s.problemId);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const ready = FOUNDATIONS.filter((e) => e.status === 'available').length;
+  // Opens on the collection of the exercise being worked on.
+  const [collectionId, setCollectionId] = useState(() => collectionOf(problemId)?.id ?? COLLECTIONS[0].id);
+  const collection = COLLECTIONS.find((c) => c.id === collectionId)!;
+  const ready = collection.exercises.filter((e) => e.status === 'available').length;
+  const total = collection.exercises.length;
 
   useEffect(() => {
+    // Focus stays in the list while it is open, and goes back to the button that opened it.
+    const release = holdFocusInDialog();
     closeRef.current?.focus();
+    return release;
+  }, []);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -46,29 +67,46 @@ export function PracticeBrowser({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
         className="panel flex max-h-full w-full max-w-3xl flex-col overflow-hidden sm:max-h-[min(52rem,100%)]"
       >
-        <header className="flex items-start gap-3 border-b border-navy-700 px-5 py-4">
-          <div className="min-w-0 flex-1">
+        <header className="flex flex-col gap-3 border-b border-navy-700 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <div role="group" aria-label="Practice collection" className="flex flex-wrap rounded-full bg-navy-950 p-0.5">
+              {COLLECTIONS.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={c.id === collectionId}
+                  onClick={() => setCollectionId(c.id)}
+                  className={`rounded-full px-3.5 py-1 text-[13px] font-semibold transition-colors pointer-coarse:py-2.5 ${
+                    c.id === collectionId ? 'bg-navy-700 text-navy-100' : 'text-navy-300 hover:text-navy-100'
+                  }`}
+                >
+                  {c.short}
+                </button>
+              ))}
+            </div>
+            <span className="flex-1" />
+            <button ref={closeRef} type="button" className="btn-quiet shrink-0" onClick={onClose}>
+              Close
+            </button>
+          </div>
+          <div>
             <h2 id="practice-title" className="text-[19px] font-bold text-navy-50">
-              {COLLECTION_TITLE}
+              {collection.title}
             </h2>
             <p className="mt-1 text-[13px] leading-snug text-navy-300">
-              An original practice set written for Drawgorithms. {ready} of {FOUNDATIONS.length} exercises are ready: each has tested
-              examples, hints, a reference solution with a walkthrough, and a drawing the board supports.
-              {ready < FOUNDATIONS.length && " The rest are planned and can't be opened yet."}
+              {collection.blurb} {ready} of {total} exercises are ready: each has tested examples, hints, a reference solution with a
+              walkthrough, and a drawing the board supports.
+              {ready < total && " The rest are planned and can't be opened yet."}
             </p>
           </div>
-          <button ref={closeRef} type="button" className="btn-quiet shrink-0" onClick={onClose}>
-            Close
-          </button>
         </header>
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {TOPICS.map((t) => {
-            const list = FOUNDATIONS.filter((e) => e.topic === t.id);
+          {sections(collection).map(({ key, title, list }) => {
             const openable = list.filter((e) => e.status === 'available').length;
             return (
-              <section key={t.id} className="mb-5">
+              <section key={key} className="mb-5">
                 <h3 className="mb-2 flex items-baseline gap-2 text-[14px] font-semibold text-navy-100">
-                  {t.title}
+                  {title}
                   <span className="text-[12px] font-normal text-navy-400">
                     {openable ? `${openable} of ${list.length} ready` : `${list.length} planned`}
                   </span>
@@ -88,7 +126,7 @@ export function PracticeBrowser({ onClose }: { onClose: () => void }) {
                             available ? 'hover:bg-navy-800' : 'cursor-default opacity-60'
                           } ${problemId === e.id ? 'bg-navy-800' : ''}`}
                         >
-                          <span className="w-6 shrink-0 text-right text-[12.5px] tabular-nums text-navy-400">{e.number}</span>
+                          <span className="w-7 shrink-0 text-right text-[12.5px] tabular-nums text-navy-400">{e.number}</span>
                           <span className="min-w-0 flex-1">
                             <span className="block text-[14px] font-semibold text-navy-100">{e.title}</span>
                             <span className="block truncate text-[12.5px] text-navy-400">{e.brief}</span>

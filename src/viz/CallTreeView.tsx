@@ -72,7 +72,7 @@ export function CallTreeView({ tree, step, heap }: CallTreeViewProps) {
       .join(', ');
 
   return (
-    <div className="relative" style={{ width, height }} aria-label={`Call tree with ${visible.length} calls`}>
+    <div className="relative" style={{ width, height }} role="group" aria-label={`Call tree with ${visible.length} calls`}>
       <svg className="absolute inset-0 overflow-visible" width={width} height={height} aria-hidden>
         <AnimatePresence initial={false}>
           {visible.map((n) => {
@@ -123,6 +123,7 @@ export function CallTreeView({ tree, step, heap }: CallTreeViewProps) {
             >
               <div
                 title={describe(n)}
+                role="img"
                 aria-label={describe(n)}
                 className={`flex size-full items-center justify-center whitespace-nowrap rounded-lg px-2 font-mono text-[12px] font-semibold transition-shadow duration-300 ${style.fill} ${style.ring} ${
                   done ? 'text-navy-300' : 'text-navy-100'
@@ -131,7 +132,8 @@ export function CallTreeView({ tree, step, heap }: CallTreeViewProps) {
                 {text}
               </div>
               {ret !== null && (
-                <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-violet-400/15 px-1.5 font-mono text-[10.5px] font-bold leading-4 text-violet-100">
+                // Opaque, so the call lines behind it don't lower the text's contrast.
+                <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#2a2752] px-1.5 font-mono text-[10.5px] font-bold leading-4 text-violet-100">
                   → {ret}
                 </span>
               )}

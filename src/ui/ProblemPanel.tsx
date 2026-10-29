@@ -164,7 +164,7 @@ function PasteBox() {
                 className="rounded-md border border-navy-600 px-1.5 py-0.5"
                 title={`The description says “${s.because}”.`}
               >
-                {s.structure} <span className="text-navy-500">(“{s.because}”)</span>
+                {s.structure} <span className="text-navy-400">(“{s.because}”)</span>
               </li>
             ))}
           </ul>

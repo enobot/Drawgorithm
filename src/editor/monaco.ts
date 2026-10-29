@@ -41,18 +41,19 @@ monaco.editor.defineTheme('drawgorithms', {
   base: 'vs-dark',
   inherit: true,
   rules: [
-    { token: 'comment', foreground: '7d91b5', fontStyle: 'italic' },
+    // Light enough for 4.5:1 contrast on the current-step line highlight as well as the editor background.
+    { token: 'comment', foreground: 'a6b5d2', fontStyle: 'italic' },
     { token: 'keyword', foreground: 'c4b5fd' },
     { token: 'number', foreground: 'fcd34d' },
     { token: 'string', foreground: '99f6e4' },
     { token: 'identifier', foreground: 'e6ecf7' },
     { token: 'type.identifier', foreground: '7dd3fc' },
-    { token: 'delimiter', foreground: 'a6b5d2' },
+    { token: 'delimiter', foreground: 'b8c4dc' },
   ],
   colors: {
     'editor.background': '#0f1a2e',
     'editor.foreground': '#e6ecf7',
-    'editorLineNumber.foreground': '#3f5b8a',
+    'editorLineNumber.foreground': '#7d91b5',
     'editorLineNumber.activeForeground': '#a6b5d2',
     'editor.selectionBackground': '#2d467099',
     'editor.inactiveSelectionBackground': '#2d467055',

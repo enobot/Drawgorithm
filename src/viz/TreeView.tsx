@@ -301,22 +301,26 @@ function TreeComponentView({ comp, available, props }: { comp: TreeComponent; av
             const b = nodes.get(e.to);
             if (!a || !b) return null;
             const cycle = e.kind === 'cycle' ? cycleGeometry(a, b) : null;
+            const text = e.kind === 'cycle' ? `${e.side} → cycle` : `${e.side}: 2nd parent`;
+            // A second-parent label goes right of its branch, or left of it when it would run past the drawing's edge.
+            const midX = (a.x + b.x) / 2;
+            const leftOfBranch = !cycle && midX + 8 + text.length * 7 > width;
             return (
               // Outside the curve, on a halo of board color, so no line runs through the words.
               <text
                 key={`t-${e.from}-${e.side}`}
-                x={cycle ? cycle.mid.x + cycle.side * 10 : (a.x + b.x) / 2 + 8}
+                x={cycle ? cycle.mid.x + cycle.side * 10 : leftOfBranch ? midX - 8 : midX + 8}
                 y={cycle ? cycle.mid.y + 4 : (a.y + b.y) / 2 + 4}
                 className={e.kind === 'cycle' ? 'fill-rose-300' : 'fill-amber-300'}
                 fontSize={12}
                 fontWeight={700}
-                textAnchor={cycle ? (cycle.side < 0 ? 'end' : 'start') : 'start'}
+                textAnchor={cycle ? (cycle.side < 0 ? 'end' : 'start') : leftOfBranch ? 'end' : 'start'}
                 stroke="#0b1322"
                 strokeWidth={5}
                 strokeLinejoin="round"
                 paintOrder="stroke"
               >
-                {e.kind === 'cycle' ? `${e.side} → cycle` : `${e.side}: 2nd parent`}
+                {text}
               </text>
             );
           })}

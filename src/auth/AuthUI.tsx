@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { holdFocusInDialog } from '../ui/modal';
 import { authSetup } from './client';
 import { setupProblem } from './config';
 import { MIN_PASSWORD } from './messages';
@@ -180,15 +182,14 @@ function DialogBody({ panel }: { panel: AuthPanel }) {
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    // Note where focus was (the button that opened the dialog) before moving it to the first field.
-    const opener = document.activeElement as HTMLElement | null;
+    // Focus stays in the dialog while it is open, and goes back to the button that opened it.
+    const release = holdFocusInDialog();
     formRef.current?.querySelector('input')?.focus();
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && close();
     window.addEventListener('keydown', esc);
     return () => {
       window.removeEventListener('keydown', esc);
-      // Back to the button that opened the dialog.
-      opener?.focus?.();
+      release();
     };
   }, [close]);
 
@@ -208,7 +209,8 @@ function DialogBody({ panel }: { panel: AuthPanel }) {
   };
   const action = { 'log-in': 'Log in', 'sign-up': 'Create account', forgot: 'Send reset link', 'new-password': 'Save password' }[panel];
 
-  return (
+  // Drawn outside the app (#root), which is inert while the dialog is open.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-navy-950/75 p-4 backdrop-blur-sm"
       onPointerDown={(e) => e.target === e.currentTarget && close()}
@@ -288,6 +290,7 @@ function DialogBody({ panel }: { panel: AuthPanel }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

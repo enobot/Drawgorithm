@@ -4,7 +4,21 @@ import type { Effect, Heap, HeapSnap, Step, ValueSnap } from '../../trace/types'
 import { formatSnap, nodeValueLabel, type ObjectSnap } from '../analysis';
 import type { ShapeOf } from '../bindings';
 import type { ItemTrack } from './identity';
-import { Flags, INK, Label, Mover, Paper, StickFigure, TONE, ValueCard, pressable, useSvgId, type Tone, SketchFilter } from './kit';
+import {
+  Flags,
+  INK,
+  Label,
+  Mover,
+  Paper,
+  StickFigure,
+  TONE,
+  ValueCard,
+  pressable,
+  textTone,
+  useSvgId,
+  type Tone,
+  SketchFilter,
+} from './kit';
 
 type ArraySnap = Extract<HeapSnap, { kind: 'array' }>;
 
@@ -180,38 +194,42 @@ export function QueueScene({
               exitTo={{ dx: i === 0 ? -110 : 90, dy: i === 0 ? -10 : 0 }}
             >
               {(walking) => (
-                <g
-                  {...pressable(() => {
-                    setPicked(picked === id ? null : id);
-                    if (refId !== null) onSelectNode?.(refId);
-                    if (line) onRevealLine?.(line);
-                  })}
-                  onFocus={() => setFocused(id)}
-                  onBlur={() => setFocused((f) => (f === id ? null : f))}
-                  aria-label={`${name}[${i}] = ${fullText(v, heap, shapeOf)}${note ? `, just ${note}` : ''}${line ? `, joined the line at line ${line}` : ''}`}
-                >
-                  <title>{`${name}[${i}] = ${fullText(v, heap, shapeOf)}${line ? ` (joined at line ${line})` : ''}`}</title>
-                  {/* Picked: a solid ring. Keyboard focus: a dashed one, so tabbing through the line is visible. */}
-                  {(picked === id || focused === id) && (
-                    <ellipse
-                      cx={0}
-                      cy={-34}
-                      rx={32}
-                      ry={46}
-                      fill="none"
-                      stroke={TONE.compare}
-                      strokeWidth={2}
-                      strokeDasharray={picked === id ? undefined : '5 5'}
-                    />
-                  )}
-                  <StickFigure pose="hold" tone={tone} walking={walking} facing={-1} filter={sketch}>
-                    <ValueCard {...held(v, heap, shapeOf)} tone={tone} />
-                  </StickFigure>
-                  {note && <Label x={0} y={-74} text={note} color={TONE[tone]} size={15} />}
+                <>
+                  <g
+                    {...pressable(() => {
+                      setPicked(picked === id ? null : id);
+                      if (refId !== null) onSelectNode?.(refId);
+                      if (line) onRevealLine?.(line);
+                    })}
+                    onFocus={() => setFocused(id)}
+                    onBlur={() => setFocused((f) => (f === id ? null : f))}
+                    aria-label={`${name}[${i}] = ${fullText(v, heap, shapeOf)}${note ? `, just ${note}` : ''}${line ? `, joined the line at line ${line}` : ''}`}
+                  >
+                    <title>{`${name}[${i}] = ${fullText(v, heap, shapeOf)}${line ? ` (joined at line ${line})` : ''}`}</title>
+                    {/* Picked: a solid ring. Keyboard focus: a dashed one, so tabbing through the line is visible. */}
+                    {(picked === id || focused === id) && (
+                      <ellipse
+                        cx={0}
+                        cy={-34}
+                        rx={32}
+                        ry={46}
+                        fill="none"
+                        stroke={TONE.compare}
+                        strokeWidth={2}
+                        strokeDasharray={picked === id ? undefined : '5 5'}
+                      />
+                    )}
+                    <StickFigure pose="hold" tone={tone} walking={walking} facing={-1} filter={sketch}>
+                      <ValueCard {...held(v, heap, shapeOf)} tone={tone} />
+                    </StickFigure>
+                  </g>
+                  {/* The labels around the person sit outside the button, so the button's visible text is
+                      its value, which its name contains (WCAG 2.5.3); the name still says all of this. */}
+                  {note && <Label x={0} y={-74} text={note} color={textTone(tone)} size={15} />}
                   {i === 0 && <Label x={0} y={20} text={n === 1 ? 'front & back' : 'front'} size={14} color="#5b6178" />}
                   {i === n - 1 && n > 1 && <Label x={0} y={20} text="back" size={14} color="#5b6178" />}
                   {overlay && <Label x={0} y={38} text={`[${i}]`} size={14} color="#5b6178" />}
-                </g>
+                </>
               )}
             </Mover>
           );

@@ -4,7 +4,7 @@ Write code for coding-interview style problems in the language you choose and se
 
 Languages: JavaScript and Python run today. Python is real CPython 3.14 (Pyodide, compiled to WebAssembly) in its own worker, traced line by line into the same drawings; the first Python run downloads about 10 MB from this site. TypeScript, Java and C++ are planned; the Language menu marks each one as unavailable until its adapter works and is tested. See [docs/COVERAGE.md](docs/COVERAGE.md).
 
-Drawgorithms is an independent project. It is not affiliated with LeetCode. The built-in problems are written for this project.
+Drawgorithms is an independent project. It is not affiliated with or endorsed by LeetCode, NeetCode or the Tech Interview Handbook. The built-in problems are written for this project.
 
 ## Setup
 
@@ -43,6 +43,7 @@ No API key or backend is needed. Code and settings are saved in the browser (loc
 The Visual panel has two picture styles, switchable at any time without changing the run or the step:
 
 - **Illustrated**: sketchbook scenes drawn from the same trace. A **queue** (an array the code uses with `shift()`) is a line of people at a counter: `push()` adds someone at the back, `shift()` serves the front person (the clerk waves and the scene says who was served). A **linked list** is people holding one-way ropes: each rope is that node's `next`, it swings when `next` is re-pointed, and a loose rope means `null`. An **array read through index variables** (binary search, linear search) is a row of numbered shelf slots: index variables are flags, a shopper stands at the slot the code read most recently, a thought bubble shows the comparison the code actually made, and slots outside a `left..right` window are taped off. Each scene says how the analogy is simplified. **Technical overlay** adds indices and the collection state in code terms. Clicking a person in the queue scrolls the editor to the line where they joined.
+  **Gumdrops** (Two Sum so far): on the dark board, each number in an array is a pastel gumdrop whose height is its value (zeros nap, negatives hang below the line), index variables are pink tags underneath, the map is a notebook the code writes in, the problem's key variables are big stat cards, and the answer's gumdrops turn mint with a few sparkles. The cast, its colors and its rules are in [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
 - **Technical**: the cell, node and arrow drawings.
 
 Trees, maps, sets, stacks, grids, heaps, deques, graphs, tries and union-find forests are drawn the technical way in both styles for now. Item identities in a queue come from the trace's recorded adds and removes; after an operation that reorders items without recording how (`sort`, `splice`), the scene starts over with a new arrangement instead of inventing movements.
@@ -56,6 +57,12 @@ The **Learn** button in the Problem panel opens 34 lessons, from the basics (arr
 An optional, original practice collection (the **Practice** button in the Problem panel). It is written for Drawgorithms; it is not an official collection of any platform and makes no claim about which questions interviews use most. All 75 exercises are available. An exercise becomes available only when its statement, formats, constraints, rules (empty input, duplicates, ties, ordering, mutation), examples, additional tests, starter code, progressive hints, reference solution with complexity and assumptions, and visualization are written, and `src/practice/foundations.test.ts` verifies them: the reference passes every case in the interpreter, every expected output matches an independent computation, the starter runs (and fails at least one case), and every drawing it needs is supported.
 
 Opening an exercise loads its examples as cases and its starter code into the editor. **Check all tests** runs the code in the editor on the examples and the additional tests in a separate engine worker (same limits as Run) and reports each case as passed, failed (expected vs. actual) or error. **Walk through the answer** (under **Stuck?**) plays the authored reference solution on the selected example on the board, from its first step, with how it works: the editor panel shows the answer read-only, the board and every step say it is the authored answer and not the learner's code, and picking another example replays it there. The learner's code is never changed (it isn't even put in the editor, so its undo history stays as it was); **Back to my code** returns to it and runs it again, and a walkthrough never becomes the "previous valid state" shown after a failed run of the learner's code. The reference solution's text also sits behind its own reveal. Each exercise links to the lessons it builds on (under **Before this**). Every reference solution is written in JavaScript and in Python (`src/practice/python/`, same names and steps), so the reference, its explanation and the walkthrough follow the language chosen in the editor; `src/practice/python.test.ts` runs each Python answer on every example and test on real CPython and checks its drawings and the rules the outputs can't show. Starter code is a stub for the function in either language, and Check all tests runs the code in the editor's language.
+
+## Practice: Drawgorithm Interview 100
+
+A second original collection, under the same **Practice** button (switch between the two at the top of the list). Each of its 100 exercises (25 Easy, 53 Medium, 22 Hard, listed by difficulty) is a story written for Drawgorithms with the same structure as a problem found on widely used interview-prep lists: NeetCode 150, LeetCode's Top Interview 150 and the Tech Interview Handbook. [docs/INTERVIEW-100.md](docs/INTERVIEW-100.md) names the classic problem behind each exercise and which lists include it, with the date they were read. These are popular study lists, not data on how often interviews ask a question. Statements, examples, tests, hints and answers are original; no example is taken from the lists or the platforms they link to.
+
+Every exercise has the same parts as Foundations 75, a JavaScript and a Python answer with a walkthrough, and the same checks: `src/practice/interview.test.ts` compares every expected output with an independent computation, runs the JavaScript reference on every case and checks rules the outputs can't show (for example that a deep copy is made of new nodes, or that an answer keeps no extra memory when the rules say so); `src/practice/python.test.ts` runs every Python answer on real CPython.
 
 ## Screen sizes
 
@@ -119,3 +126,9 @@ Coverage, the capability matrix and the staged plan are in [docs/COVERAGE.md](do
 ## Tests
 
 `npm test` runs Vitest: trace generation, Two Sum duplicates, Binary Search boundaries, execution limits, unsupported syntax, Live Build (unfinished code, cycles, shared and detached nodes, null children), tree layout and traversal state, representative LeetCode-style patterns, the formatter, stale-run cancellation, demo links and zoom limits, queue item identities for the illustrated view, the heap, deque, union-find, graph and trie readers (which variables get them, swaps, parent links, graph forms and traversal state, trie words and missing branches), and the Foundations 75 catalog and checker.
+
+`.github/workflows/checks.yml` runs the type check, lint, every test, the format check, the build, the third-party notice check and `npm audit` on every push and pull request.
+
+## Launch readiness, licences and legal
+
+[docs/LAUNCH-READINESS.md](docs/LAUNCH-READINESS.md) records what was checked before launch (accessibility, security, what the site stores, licences, California and federal requirements) with its sources, what was fixed, and the decisions still open. `npm run notices` regenerates `public/third-party-notices.txt`, the licences of the third-party code and fonts the site ships; run it after changing dependencies.
